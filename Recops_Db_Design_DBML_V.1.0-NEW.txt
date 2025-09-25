@@ -1,0 +1,705 @@
+// ----------------------
+// Enums
+// ----------------------
+
+Enum user_role_enum {
+  admin
+  recruiter
+}
+
+Enum requirement_status_enum {
+  Open
+  Candidate_Submission
+  Interview_Scheduled
+  Offer_Recommendation
+  On_Boarding
+  On_Hold
+  Closed
+  Cancelled
+}
+
+Enum round_type_enum {
+  interview_scheduled
+  round1
+  round2
+}
+
+Enum sla_status_enum {
+  pending
+  completed
+  breached
+  cancelled
+}
+
+Enum notification_type_enum {
+  info
+  warning
+  error
+  success
+}
+
+Enum workflow_step_enum {
+  candidate_submission
+  screening
+  interview_scheduled
+  round1
+  round2
+  offered
+  onboarding
+}
+
+Enum shift_enum {
+  Day
+  Night
+  rotational
+  flexible
+}
+
+Enum job_type_enum {
+  full_time
+  part_time
+  contract
+  internship
+  freelance
+}
+
+Enum priority_enum {
+  high
+  medium
+  low
+  urgent
+}
+
+Enum source_enum {
+  naukri_com
+  monster_india
+  timesjobs
+  shine_com
+  freshersworld
+  github_stackoverflow
+  internshala
+}
+
+Enum profile_status_enum {
+  onboarded
+  rejected
+  selected
+}
+
+Enum screening_status_enum {
+  selected
+  rejected
+}
+
+Enum interview_scheduled_status_enum {
+  scheduled
+  rescheduled
+}
+
+Enum interview_round_one_status_enum {
+  select
+  reject
+  reschedule
+}
+
+Enum interview_round_two_status_enum {
+  select
+  reject
+  reschedule
+}
+
+Enum onboarding_status_enum {
+  onboarded
+  rejected
+}
+
+Enum api_name_enum {
+  job_description_api
+}
+
+Enum setting_key_enum {
+  last_email_refresh
+}
+
+Enum department_enum {
+  Engineering
+  Human_Resources
+  Finance
+  Marketing
+  Sales
+  Operations
+  Information_Technology
+  Customer_Support
+  Product_Management
+  Quality_Assurance
+  Business_Development
+  Legal
+  Administration
+}
+
+Enum company_enum {
+  Tech_Corp
+  Infosys
+  TCS
+  Wipro
+  Accenture
+  Cognizant
+  Capgemini
+  IBM
+  Microsoft
+  Google
+  Amazon
+  Oracle
+  SAP
+  Deloitte
+  PwC
+  KPMG
+  EY
+  McKinsey
+  BCG
+  Bain
+}
+
+Enum step_name_enum {
+  candidate_submission
+  screening
+  interview_scheduled
+  interview_round_1
+  interview_round_2
+  offered
+  onboarding
+  open
+}
+
+// ----------------------
+// Core Tables
+// ----------------------
+
+// Central authentication and user management table
+Table users {
+  user_id uuid [primary key]
+  username varchar(80) [unique, not null]
+  full_name varchar(100) [not null]
+  password varchar(255) [not null]
+  email varchar(120) [unique]
+  phone_number numeric(10,0) [unique]
+  role user_role_enum [not null, default: 'recruiter']
+  otp numeric(6,0)
+  otp_expiry_time timestamp
+  failed_attempts integer [default: 0]
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (user_id)
+    (role)
+    (full_name)
+    (email)
+    (is_deleted)
+  }
+}
+
+// Job requirements tracking table
+Table requirements {
+  requirement_id uuid [primary key]
+  job_title varchar(255)
+  department department_enum
+  location varchar(150)
+  company_name company_enum
+  shift shift_enum
+  job_type job_type_enum
+  hiring_manager varchar(100)
+  experience_range varchar(50)
+  skill_id uuid [ref: > skills.skill_id]
+  minimum_qualification text
+  number_of_positions integer
+  budget_ctc varchar(50)
+  priority priority_enum
+  tentative_doj date
+  additional_remarks text
+  status requirement_status_enum [not null, default: 'Open']
+  user_id uuid [ref: > users.user_id]
+  notes text
+  closed_at timestamp
+  is_manual_requirement boolean [not null, default: false]
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (status)
+    (is_deleted)
+    (user_id)
+    (company_name)
+  }
+}
+
+// Skills management table
+Table skills {
+  skill_id uuid [primary key]
+  skill_name varchar(100) [unique, not null]
+  skill_category varchar(50)
+  description text
+  is_active boolean [not null, default: true]
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (skill_name)
+    (skill_category)
+    (is_active)
+    (is_deleted)
+  }
+}
+
+// Email details for requirements
+Table email_details {
+  email_details_id uuid [primary key]
+  requirement_id uuid [not null, ref: > requirements.requirement_id]
+  thread_id varchar(255)
+  email_id varchar(255)
+  email_subject varchar(500)
+  sender_email varchar(255)
+  sender_name varchar(100)
+  received_datetime timestamp
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (requirement_id)
+    (thread_id)
+    (email_id)
+    (sender_email)
+    (received_datetime)
+    (is_deleted)
+  }
+}
+
+// Candidate information table
+Table profiles {
+  profile_id uuid [primary key]
+  requirement_id uuid [ref: > requirements.requirement_id]
+  candidate_name varchar(100) [not null]
+  total_experience decimal(5,2)
+  relevant_experience decimal(5,2)
+  current_company varchar(100)
+  ctc_current decimal(10,2)
+  ctc_expected decimal(10,2)
+  notice_period_days integer
+  location varchar(100)
+  education text
+  skill_id uuid [ref: > skills.skill_id]
+  source source_enum
+  email_id varchar(255)
+  contact_no numeric(10,0)
+  resume_file_path varchar(500)
+  resume_file_name varchar(255)
+  status profile_status_enum
+  remark text
+  created_by_recruiter uuid [ref: > users.user_id]
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (requirement_id)
+    (candidate_name)
+    (email_id)
+    (current_company)
+    (skill_id)
+    (status)
+    (is_deleted)
+  }
+}
+
+// Profile records tracking table
+Table profile_records {
+  profile_record_id uuid [primary key]
+  profile_id uuid [not null, ref: > profiles.profile_id]
+  requirement_id uuid [not null, ref: > requirements.requirement_id]
+  status profile_status_enum [not null]
+  remark text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (profile_id)
+    (requirement_id)
+    (status)
+    (is_deleted)
+  }
+}
+
+// Screening management table
+Table screening {
+  screening_id uuid [primary key]
+  requirement_id uuid [unique, not null, ref: > requirements.requirement_id]
+  profile_id uuid [not null, ref: > profiles.profile_id]
+  start_time timestamp [not null]
+  status screening_status_enum [not null]
+  status_timestamp timestamp [not null]
+  active boolean [not null, default: true]
+  remark text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (requirement_id)
+    (profile_id)
+    (status)
+    (active)
+    (is_deleted)
+  }
+}
+
+// Interview scheduled management table
+Table interview_scheduled {
+  interview_scheduled_id uuid [primary key]
+  requirement_id uuid [unique, not null, ref: > requirements.requirement_id]
+  profile_id uuid [not null, ref: > profiles.profile_id]
+  meeting_id uuid [ref: > meetings.meeting_id]
+  start_time timestamp [not null]
+  status interview_scheduled_status_enum [not null]
+  status_timestamp timestamp [not null]
+  active boolean [not null, default: true]
+  remark text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (requirement_id)
+    (profile_id)
+    (meeting_id)
+    (status)
+    (active)
+    (is_deleted)
+  }
+}
+
+// Interview round one management table
+Table interview_round_one {
+  interview_round_one_id uuid [primary key]
+  requirement_id uuid [unique, not null, ref: > requirements.requirement_id]
+  profile_id uuid [not null, ref: > profiles.profile_id]
+  meeting_id uuid [ref: > meetings.meeting_id]
+  start_time timestamp [not null]
+  status interview_round_one_status_enum [not null]
+  status_timestamp timestamp [not null]
+  active boolean [not null, default: true]
+  remark text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (requirement_id)
+    (profile_id)
+    (meeting_id)
+    (status)
+    (active)
+    (is_deleted)
+  }
+}
+
+// Interview round two management table
+Table interview_round_two {
+  interview_round_two_id uuid [primary key]
+  requirement_id uuid [unique, not null, ref: > requirements.requirement_id]
+  profile_id uuid [not null, ref: > profiles.profile_id]
+  meeting_id uuid [ref: > meetings.meeting_id]
+  start_time timestamp [not null]
+  status interview_round_two_status_enum [not null]
+  status_timestamp timestamp [not null]
+  active boolean [not null, default: true]
+  remark text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (requirement_id)
+    (profile_id)
+    (meeting_id)
+    (status)
+    (active)
+    (is_deleted)
+  }
+}
+
+// Offer management table
+Table offer {
+  offer_id uuid [primary key]
+  profile_id uuid [not null, ref: > profiles.profile_id]
+  requirement_id uuid [not null, ref: > requirements.requirement_id]
+  ctc_offered decimal(10,2)
+  final_ctc_offered decimal(10,2)
+  active boolean [not null, default: true]
+  remark text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (profile_id)
+    (requirement_id)
+    (active)
+    (is_deleted)
+  }
+}
+
+// Onboarding management table
+Table onboarding {
+  onboarding_id uuid [primary key]
+  status onboarding_status_enum [not null]
+  active boolean [not null, default: true]
+  remark text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (status)
+    (active)
+    (is_deleted)
+  }
+}
+
+// API management table
+Table api {
+  api_id uuid [primary key]
+  api_link text [not null]
+  api_name api_name_enum [not null]
+  active boolean [not null, default: true]
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (api_name)
+    (active)
+    (is_deleted)
+  }
+}
+
+// System configuration management
+Table system_settings {
+  system_setting_id uuid [primary key]
+  setting_key setting_key_enum [unique, not null]
+  setting_value text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (setting_key)
+    (is_deleted)
+  }
+}
+
+// Interview/meeting scheduling
+Table meetings {
+  meeting_id uuid [primary key]
+  profile_id uuid [ref: > profiles.profile_id]
+  round_type round_type_enum [not null, default: 'interview_scheduled']
+  meet_link text [not null]
+  start_time timestamp
+  end_time timestamp
+  subject varchar(255)
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (round_type)
+    (profile_id)
+    (start_time)
+    (is_deleted)
+  }
+}
+
+// SLA configuration management
+Table sla_config {
+  sla_config_id uuid [primary key]
+  step_name step_name_enum [unique, not null]
+  sla_hours integer [not null, default: 24]
+  sla_days integer [not null, default: 1]
+  is_active boolean [not null, default: true]
+  priority integer [not null, default: 1]
+  description text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (step_name)
+    (is_active)
+    (priority)
+    (is_deleted)
+  }
+}
+
+// SLA compliance tracking
+Table sla_tracker {
+  sla_tracker_id uuid [primary key]
+  requirement_id uuid [not null, ref: > requirements.requirement_id]
+  step_name step_name_enum [not null]
+  step_started_at timestamp [not null]
+  step_completed_at timestamp
+  sla_hours integer [not null]
+  sla_days integer [not null]
+  actual_duration_hours decimal(10,2)
+  actual_duration_days decimal(10,2)
+  sla_status sla_status_enum
+  sla_breach_hours decimal(10,2)
+  user_id uuid [ref: > users.user_id]
+  notes text
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (requirement_id)
+    (step_name)
+    (sla_status)
+    (user_id)
+    (step_started_at)
+    (step_completed_at)
+    (is_deleted)
+  }
+}
+
+// User notifications
+Table notifications {
+  notification_id uuid [primary key]
+  user_id uuid [not null, ref: > users.user_id]
+  type notification_type_enum [not null]
+  title varchar(255) [not null]
+  message text [not null]
+  data text
+  is_read boolean [not null, default: false]
+  expires_at timestamp
+  is_deleted boolean [not null, default: false]
+  deleted_at timestamp
+  deleted_by uuid [ref: > users.user_id]
+  created_by uuid [ref: > users.user_id]
+  updated_by uuid [ref: > users.user_id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (user_id)
+    (type)
+    (is_read)
+    (created_at)
+    (expires_at)
+    (is_deleted)
+  }
+}
+
+// ----------------------
+// Triggers
+// ----------------------
+
+// Trigger to automatically set created_by and updated_by fields
+// This trigger will fire before INSERT on users table
+Trigger set_user_audit_fields_on_insert {
+  on: users
+  timing: before
+  event: insert
+  sql: |
+    BEGIN
+      -- Set created_by to the current user's ID from session context
+      NEW.created_by = COALESCE(CURRENT_USER_ID(), NEW.user_id);
+      NEW.updated_by = COALESCE(CURRENT_USER_ID(), NEW.user_id);
+      NEW.updated_at = CURRENT_TIMESTAMP;
+    END;
+}
+
+// Trigger to automatically set updated_by field
+// This trigger will fire before UPDATE on users table
+Trigger set_user_audit_fields_on_update {
+  on: users
+  timing: before
+  event: update
+  sql: |
+    BEGIN
+      -- Set updated_by to the current user's ID from session context
+      NEW.updated_by = COALESCE(CURRENT_USER_ID(), OLD.updated_by);
+      NEW.updated_at = CURRENT_TIMESTAMP;
+    END;
+}
+

@@ -1,0 +1,42 @@
+from datetime import datetime
+from app.database import db, GUID, postgresql_uuid_default
+import uuid
+import enum
+
+class ApiNameEnum(enum.Enum):
+    job_description_api = "job_description_api"
+
+class Api(db.Model):
+    __tablename__ = 'api'
+    
+    api_id = db.Column(GUID, primary_key=True, server_default=postgresql_uuid_default())
+    api_link = db.Column(db.Text, nullable=False)
+    api_name = db.Column(db.Enum(ApiNameEnum), nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    deleted_by = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=True)
+    created_by = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=True)
+    updated_by = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # No specific relationships defined as this is a standalone API configuration record
+    
+    def __repr__(self):
+        return f'<Api {self.api_name.value if self.api_name else None}>'
+    
+    def to_dict(self):
+        return {
+            'api_id': str(self.api_id) if self.api_id else None,
+            'api_link': self.api_link,
+            'api_name': self.api_name.value if self.api_name else None,
+            'active': self.active,
+            'is_deleted': self.is_deleted,
+            'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None,
+            'deleted_by': str(self.deleted_by) if self.deleted_by else None,
+            'created_by': str(self.created_by) if self.created_by else None,
+            'updated_by': str(self.updated_by) if self.updated_by else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }

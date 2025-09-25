@@ -1,0 +1,18 @@
+{
+  "requirements.department": [
+    "Digital",
+    "ERP",
+    "Enabling"
+  ],
+  "requirements.company_name": [
+    "Adani",
+    "Rigved Infotech"
+  ],
+  "requirements.job_type": [
+    "Full-time"
+  ],
+  "profiles.source": [
+    "Naukari",
+    "Naukri"
+  ]
+}

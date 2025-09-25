@@ -1,0 +1,11 @@
+{
+  "name": "email-tracker",
+  "version": "1.0.0",
+  "description": "Email tracking and management application",
+  "homepage": "https://RigvedTechno.github.io/{Track-it-Up}/",
+  "dependencies": {
+    "@types/dompurify": "^3.0.5",
+    "dompurify": "^3.2.6",
+    "html-react-parser": "^5.2.5"
+  }
+}
