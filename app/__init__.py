@@ -11,6 +11,7 @@ from app.routes.sla_api import sla_bp
 from app.routes.workflow_api import workflow_bp
 from app.routes.notification_api import notification_bp
 from app.routes.domain_resolver_api import domain_resolver_api_bp
+from app.routes.domain_test_api import domain_test_bp
 from app.database import init_db, db
 from app.services.sla_service import SLAService
 from app.middleware.domain_db_resolver import domain_db_resolver
@@ -56,6 +57,14 @@ def create_app(config_name='default'):
     # Initialize database
     init_db(app)
 
+    # Setup domain-aware models for automatic domain-specific database routing
+    try:
+        from app.services.domain_aware_db import setup_domain_aware_models
+        setup_domain_aware_models()
+        print("Domain-aware database models configured successfully!")
+    except Exception as e:
+        print(f"Warning: Could not configure domain-aware models: {e}")
+
     # Initialize Flask-Migrate
     migrate = Migrate(app, db)
 
@@ -81,6 +90,7 @@ def create_app(config_name='default'):
     app.register_blueprint(workflow_bp)  # Register workflow routes
     app.register_blueprint(notification_bp)  # Register notification routes
     app.register_blueprint(domain_resolver_api_bp)  # Register domain resolver API routes
+    app.register_blueprint(domain_test_bp)  # Register domain test API routes
 
     # Configure and start APScheduler
     app.config['SCHEDULER_API_ENABLED'] = False  # Disable built-in API routes to avoid conflicts
@@ -99,6 +109,36 @@ def create_app(config_name='default'):
         print("APScheduler started successfully!")
     else:
         print("APScheduler disabled for migration/testing mode.")
+    
+    # Add domain isolation middleware for API requests
+    @app.before_request
+    def setup_domain_isolation():
+        """Ensure domain-specific database session is available for API requests"""
+        from flask import request
+        
+        # Skip for static files and non-API endpoints
+        if (request.endpoint and 
+            (request.endpoint.startswith('static') or 
+             not request.path.startswith('/api/'))):
+            return
+        
+        # Skip for domain resolver API (it handles its own isolation)
+        if request.path.startswith('/api/domain/'):
+            return
+        
+        # Skip for localhost (uses default database)
+        domain = request.headers.get('X-Original-Domain')
+        if not domain:
+            domain = request.headers.get('X-Domain')
+        
+        if domain and not domain.startswith(('localhost', '127.0.0.1')):
+            try:
+                # Ensure domain database isolation is set up
+                from app.middleware.domain_auth import ensure_domain_isolation
+                ensure_domain_isolation()
+            except Exception as e:
+                # Log error but don't break the request - let it fall back to default DB
+                app.logger.warning(f"Could not set up domain isolation for {domain}: {str(e)}")
     
     # Add security headers
     @app.after_request

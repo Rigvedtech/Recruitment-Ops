@@ -289,7 +289,7 @@ export async function fetchProfilesData(filters?: {
 // Tracker API methods
 export async function fetchTrackerRequirements() {
     const headers = getAuthHeaders();
-    const response = await fetch(`getApiUrl('tracker`, {
+    const response = await fetch(getApiUrl('/tracker'), {
         method: 'GET',
         headers,
     });
@@ -303,7 +303,7 @@ export async function fetchTrackerRequirements() {
 
 export async function fetchTrackerStats() {
     const headers = getAuthHeaders();
-    const response = await fetch(`getApiUrl('tracker/stats`, {
+    const response = await fetch(getApiUrl('/tracker/stats'), {
         method: 'GET',
         headers,
     });
@@ -317,7 +317,7 @@ export async function fetchTrackerStats() {
 
 export async function fetchTrackerRequirement(requestId: string) {
     const headers = getAuthHeaders();
-    const response = await fetch(`getApiUrl('tracker/${requestId}`, {
+    const response = await fetch(getApiUrl(`/tracker/${requestId}`), {
         method: 'GET',
         headers,
     });
@@ -331,7 +331,7 @@ export async function fetchTrackerRequirement(requestId: string) {
 
 export async function updateTrackerRequirement(requestId: string, updates: any) {
     const headers = getAuthHeaders();
-    const response = await fetch(`getApiUrl('tracker/${requestId}`, {
+    const response = await fetch(getApiUrl(`/tracker/${requestId}`), {
         method: 'PUT',
         headers,
         body: JSON.stringify(updates),
@@ -410,7 +410,7 @@ export const api = {
 
     getRecruiterActivity: async (days: number = 7) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`getApiUrl('recruiter-activity?days=${days}`, {
+        const response = await fetch(getApiUrl(`/recruiter-activity?days=${days}`), {
             method: 'GET',
             headers,
         });
@@ -424,7 +424,7 @@ export const api = {
 
     getRequirementsActivity: async () => {
         const headers = getAuthHeaders();
-        const response = await fetch(`getApiUrl('requirements-activity`, {
+        const response = await fetch(getApiUrl('/requirements-activity'), {
             method: 'GET',
             headers,
         });
@@ -438,7 +438,7 @@ export const api = {
 
     createRequirement: async (requirementData: any) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`getApiUrl('requirements`, {
+        const response = await fetch(getApiUrl('/requirements'), {
             method: 'POST',
             headers,
             body: JSON.stringify(requirementData),
@@ -461,7 +461,7 @@ export const api = {
 
     checkRequirementDuplicate: async (requirementData: any) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`getApiUrl('requirements/check-duplicate`, {
+        const response = await fetch(getApiUrl('/requirements/check-duplicate'), {
             method: 'POST',
             headers,
             body: JSON.stringify(requirementData),
@@ -477,7 +477,7 @@ export const api = {
 
     forceCreateRequirement: async (requirementData: any) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`getApiUrl('requirements/force-create`, {
+        const response = await fetch(getApiUrl('/requirements/force-create'), {
             method: 'POST',
             headers,
             body: JSON.stringify(requirementData),
@@ -504,7 +504,7 @@ export const api = {
         // Remove Content-Type header to let browser set it with boundary for FormData
         delete headers['Content-Type'];
 
-        const response = await fetch(`getApiUrl('requirements/bulk-upload`, {
+        const response = await fetch(getApiUrl('/requirements/bulk-upload'), {
             method: 'POST',
             headers,
             body: formData,
@@ -526,7 +526,7 @@ export const api = {
         // Remove Content-Type header to let browser set it with boundary for FormData
         delete headers['Content-Type'];
 
-        const response = await fetch(`getApiUrl('requirements/upload-jd`, {
+        const response = await fetch(getApiUrl('/requirements/upload-jd'), {
             method: 'POST',
             headers,
             body: formData,
@@ -549,7 +549,7 @@ export const api = {
         // Remove Content-Type header to let browser set it with boundary for FormData
         delete headers['Content-Type'];
 
-        const response = await fetch(`getApiUrl('requirements/update-jd`, {
+        const response = await fetch(getApiUrl('/requirements/update-jd'), {
             method: 'POST',
             headers,
             body: formData,
@@ -663,7 +663,7 @@ export const api = {
     // Profile movement methods
     moveProfile: async (profileId: string, fromRequestId: string, toRequestId: string, reason?: string) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`getApiUrl('tracker/profiles/move`, {
+        const response = await fetch(getApiUrl('/tracker/profiles/move'), {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -685,7 +685,7 @@ export const api = {
 
     canMoveProfile: async (profileId: string, requestId: string) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`getApiUrl('tracker/profiles/${profileId}/can-move-to/${requestId}`, {
+        const response = await fetch(getApiUrl(`/tracker/profiles/${profileId}/can-move-to/${requestId}`), {
             method: 'GET',
             headers,
         });
