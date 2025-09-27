@@ -78,7 +78,7 @@ function EmailDashboardContent() {
                 console.log('No previous refresh found, fetching last 20 days');
             }
                 
-            const response = await axios.get(`${API_BASE_URL}/get-latest-mails${params}`);
+            const response = await axios.get(`${API_BASE_URL}/api/get-latest-mails${params}`);
             
             // Map the response to match our Email type
             const newEmails: Email[] = response.data.map((email: any) => ({
@@ -202,7 +202,7 @@ function EmailDashboardContent() {
                         <button
                             onClick={async () => {
                                 try {
-                                    await axios.post(`${API_BASE_URL}/clear-email-refresh-history`);
+                                    await axios.post(`${API_BASE_URL}/api/clear-email-refresh-history`);
                                     setLastFetchTime(null);
                                     setEmails([]);
                                     setEmailsLoaded(false);

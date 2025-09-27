@@ -25,6 +25,16 @@ const getApiBaseUrl = () => {
     return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1976';
 };
 
+// Helper function to get API URL with proper /api prefix
+const getApiUrl = (endpoint: string) => {
+    const baseUrl = getApiBaseUrl();
+    // If baseUrl already ends with /api, don't add it again
+    if (baseUrl.endsWith('/api')) {
+        return `${baseUrl}${endpoint}`;
+    }
+    return `${baseUrl}/api${endpoint}`;
+};
+
 const API_BASE_URL = getApiBaseUrl();
 
 // Helper function to get auth headers with domain
@@ -51,7 +61,7 @@ const getAuthHeaders = () => {
 
 // Configure axios
 const axiosApi = axios.create({
-    baseURL: API_BASE_URL,
+    baseURL: getApiUrl(''),
     headers: {
         'Content-Type': 'application/json',
     },
@@ -99,7 +109,7 @@ interface EmailResponse {
 
 export async function fetchEmails() {
     const headers = getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/emails/all`, {
+    const response = await fetch(getApiUrl('/emails/all'), {
         headers
     });
     if (!response.ok) {
@@ -110,7 +120,7 @@ export async function fetchEmails() {
 
 export async function getEmailRefreshStatus() {
     const headers = getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/email-refresh-status`, {
+    const response = await fetch(getApiUrl('/email-refresh-status'), {
         headers
     });
     if (!response.ok) {
@@ -131,7 +141,7 @@ export async function fetchLatestEmails() {
 
 export async function fetchRecruiterEmails() {
     const headers = getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/emails/recruiter`, {
+    const response = await fetch(getApiUrl('/emails/recruiter'), {
         headers
     });
     if (!response.ok) {
@@ -142,7 +152,7 @@ export async function fetchRecruiterEmails() {
 
 export async function fetchEmailsForRequest(requestId: string) {
     const headers = getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/tracker/emails/${requestId}`, {
+    const response = await fetch(getApiUrl(`/tracker/emails/${requestId}`), {
         headers
     });
     if (!response.ok) {
@@ -208,11 +218,11 @@ export const exportToExcel = async (emails: Email[]) => {
 };
 
 export const getExportFileUrl = (filename: string) => {
-    return `${API_BASE_URL}/exports/${filename}`;
+    return getApiUrl(`/exports/${filename}`);
 };
 
 export async function exportEmails(emails: any[]) {
-    const response = await fetch(`${API_BASE_URL}/emails/export`, {
+    const response = await fetch(getApiUrl('/emails/export'), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -226,7 +236,7 @@ export async function exportEmails(emails: any[]) {
 }
 
 export async function fetchStudentData() {
-    const response = await fetch(`${API_BASE_URL}/students`, {
+    const response = await fetch(getApiUrl('/students'), {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -261,7 +271,7 @@ export async function fetchProfilesData(filters?: {
         });
     }
     
-    const url = `${API_BASE_URL}/profiles${params.toString() ? `?${params.toString()}` : ''}`;
+    const url = getApiUrl(`/profiles${params.toString() ? `?${params.toString()}` : ''}`);
     const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -279,7 +289,7 @@ export async function fetchProfilesData(filters?: {
 // Tracker API methods
 export async function fetchTrackerRequirements() {
     const headers = getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/tracker`, {
+    const response = await fetch(`getApiUrl('tracker`, {
         method: 'GET',
         headers,
     });
@@ -293,7 +303,7 @@ export async function fetchTrackerRequirements() {
 
 export async function fetchTrackerStats() {
     const headers = getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/tracker/stats`, {
+    const response = await fetch(`getApiUrl('tracker/stats`, {
         method: 'GET',
         headers,
     });
@@ -307,7 +317,7 @@ export async function fetchTrackerStats() {
 
 export async function fetchTrackerRequirement(requestId: string) {
     const headers = getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/tracker/${requestId}`, {
+    const response = await fetch(`getApiUrl('tracker/${requestId}`, {
         method: 'GET',
         headers,
     });
@@ -321,7 +331,7 @@ export async function fetchTrackerRequirement(requestId: string) {
 
 export async function updateTrackerRequirement(requestId: string, updates: any) {
     const headers = getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/tracker/${requestId}`, {
+    const response = await fetch(`getApiUrl('tracker/${requestId}`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(updates),
@@ -338,9 +348,9 @@ export async function updateTrackerRequirement(requestId: string, updates: any) 
 export async function login(username: string, password: string) {
     const domain = getCurrentDomain();
     console.log('Attempting login with:', { username, password, domain });
-    console.log('API URL:', `${API_BASE_URL}/login`);
+    console.log('API URL:', getApiUrl('/login'));
     
-    const response = await fetch(`${API_BASE_URL}/login`, {
+    const response = await fetch(getApiUrl('/login'), {
         method: 'POST',
         headers: {
             'X-Original-Domain': domain,
@@ -366,7 +376,7 @@ export async function login(username: string, password: string) {
 // Recruiter login function that includes domain header
 export async function recruiterLogin(username: string, password: string) {
     const domain = getCurrentDomain();
-    const response = await fetch(`${API_BASE_URL}/recruiter/login`, {
+    const response = await fetch(getApiUrl('/recruiter/login'), {
         method: 'POST',
         headers: {
             'X-Original-Domain': domain,
@@ -386,7 +396,7 @@ export async function recruiterLogin(username: string, password: string) {
 export const api = {
     get: async (endpoint: string) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        const response = await fetch(getApiUrl(endpoint), {
             method: 'GET',
             headers,
         });
@@ -400,7 +410,7 @@ export const api = {
 
     getRecruiterActivity: async (days: number = 7) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/recruiter-activity?days=${days}`, {
+        const response = await fetch(`getApiUrl('recruiter-activity?days=${days}`, {
             method: 'GET',
             headers,
         });
@@ -414,7 +424,7 @@ export const api = {
 
     getRequirementsActivity: async () => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/requirements-activity`, {
+        const response = await fetch(`getApiUrl('requirements-activity`, {
             method: 'GET',
             headers,
         });
@@ -428,7 +438,7 @@ export const api = {
 
     createRequirement: async (requirementData: any) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/requirements`, {
+        const response = await fetch(`getApiUrl('requirements`, {
             method: 'POST',
             headers,
             body: JSON.stringify(requirementData),
@@ -451,7 +461,7 @@ export const api = {
 
     checkRequirementDuplicate: async (requirementData: any) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/requirements/check-duplicate`, {
+        const response = await fetch(`getApiUrl('requirements/check-duplicate`, {
             method: 'POST',
             headers,
             body: JSON.stringify(requirementData),
@@ -467,7 +477,7 @@ export const api = {
 
     forceCreateRequirement: async (requirementData: any) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/requirements/force-create`, {
+        const response = await fetch(`getApiUrl('requirements/force-create`, {
             method: 'POST',
             headers,
             body: JSON.stringify(requirementData),
@@ -494,7 +504,7 @@ export const api = {
         // Remove Content-Type header to let browser set it with boundary for FormData
         delete headers['Content-Type'];
 
-        const response = await fetch(`${API_BASE_URL}/requirements/bulk-upload`, {
+        const response = await fetch(`getApiUrl('requirements/bulk-upload`, {
             method: 'POST',
             headers,
             body: formData,
@@ -516,7 +526,7 @@ export const api = {
         // Remove Content-Type header to let browser set it with boundary for FormData
         delete headers['Content-Type'];
 
-        const response = await fetch(`${API_BASE_URL}/requirements/upload-jd`, {
+        const response = await fetch(`getApiUrl('requirements/upload-jd`, {
             method: 'POST',
             headers,
             body: formData,
@@ -539,7 +549,7 @@ export const api = {
         // Remove Content-Type header to let browser set it with boundary for FormData
         delete headers['Content-Type'];
 
-        const response = await fetch(`${API_BASE_URL}/requirements/update-jd`, {
+        const response = await fetch(`getApiUrl('requirements/update-jd`, {
             method: 'POST',
             headers,
             body: formData,
@@ -597,7 +607,7 @@ export const api = {
             body = JSON.stringify(data);
         }
         
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        const response = await fetch(getApiUrl(endpoint), {
             method: 'POST',
             headers,
             body,
@@ -623,7 +633,7 @@ export const api = {
 
     put: async (endpoint: string, data: any) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        const response = await fetch(getApiUrl(endpoint), {
             method: 'PUT',
             headers,
             body: JSON.stringify(data),
@@ -638,7 +648,7 @@ export const api = {
 
     delete: async (endpoint: string) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        const response = await fetch(getApiUrl(endpoint), {
             method: 'DELETE',
             headers,
         });
@@ -653,7 +663,7 @@ export const api = {
     // Profile movement methods
     moveProfile: async (profileId: string, fromRequestId: string, toRequestId: string, reason?: string) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/tracker/profiles/move`, {
+        const response = await fetch(`getApiUrl('tracker/profiles/move`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -675,7 +685,7 @@ export const api = {
 
     canMoveProfile: async (profileId: string, requestId: string) => {
         const headers = getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/tracker/profiles/${profileId}/can-move-to/${requestId}`, {
+        const response = await fetch(`getApiUrl('tracker/profiles/${profileId}/can-move-to/${requestId}`, {
             method: 'GET',
             headers,
         });

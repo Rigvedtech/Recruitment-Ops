@@ -79,12 +79,12 @@ const TrackerDashboard: React.FC = () => {
       setError(null);
       
       // Fetch tracker data
-      const trackerResponse = await axios.get(`${API_BASE_URL}/tracker`);
+      const trackerResponse = await axios.get(`${API_BASE_URL}/api/tracker`);
       
       // Fetch profiles count from the API
       let profilesResponse;
       try {
-        profilesResponse = await axios.get(`${API_BASE_URL}/profiles`);
+        profilesResponse = await axios.get(`${API_BASE_URL}/api/profiles`);
       } catch (profilesError) {
         console.error('Error fetching profiles:', profilesError);
         // Set a fallback value
