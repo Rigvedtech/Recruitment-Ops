@@ -3,6 +3,7 @@ from flask import Flask
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_apscheduler import APScheduler
+from flask_jwt_extended import JWTManager
 from app.routes.api import api_bp
 from app.routes.main import main_bp
 from app.routes.tracker_api import tracker_bp
@@ -13,10 +14,14 @@ from app.routes.domain_resolver_api import domain_resolver_api_bp
 from app.database import init_db, db
 from app.services.sla_service import SLAService
 from app.middleware.domain_db_resolver import domain_db_resolver
+from app.services.database_manager import database_manager
 from config import Config
 
 # Initialize APScheduler
 scheduler = APScheduler()
+
+# Initialize JWT Manager
+jwt = JWTManager()
 
 def create_app(config_name='default'):
     app = Flask(__name__)
@@ -24,11 +29,21 @@ def create_app(config_name='default'):
     # Load configuration from Config class
     app.config.from_object(Config)
 
-    # Initialize CORS
-    CORS(app)
+    # Initialize CORS with security settings
+    CORS(app, 
+         origins=['http://rgvdit-rops.rigvedtech.com:3000', 'http://localhost:3000', 'http://finq-ops.rigvedtech.com:3000'],
+         methods=['GET', 'POST', 'PUT', 'DELETE'],
+         allow_headers=['Content-Type', 'Authorization']
+    )
+    
+    # Initialize JWT Manager
+    jwt.init_app(app)
 
     # Initialize domain database resolver middleware (BEFORE database init)
     domain_db_resolver.init_app(app)
+    
+    # Initialize database manager for domain isolation
+    database_manager.init_app(app)
 
     # Initialize database
     init_db(app)
@@ -76,6 +91,16 @@ def create_app(config_name='default'):
         print("APScheduler started successfully!")
     else:
         print("APScheduler disabled for migration/testing mode.")
+    
+    # Add security headers
+    @app.after_request
+    def add_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'
+        return response
 
     # Print registered routes for debugging
     print("\nRegistered Routes:")

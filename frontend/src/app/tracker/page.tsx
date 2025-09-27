@@ -126,6 +126,9 @@ const TrackerPage: React.FC = () => {
   })
   const [showFilters, setShowFilters] = useState(false)
 
+  // Company enum options loaded from backend (database)
+  const [companyOptions, setCompanyOptions] = useState<string[]>([])
+
   useEffect(() => {
     // Check authentication first
     const storedUser = localStorage.getItem('user')
@@ -1127,6 +1130,7 @@ const TrackerPage: React.FC = () => {
           getStatusColor={getStatusColor}
           showViewJDModal={showViewJDModal}
           setShowViewJDModal={setShowViewJDModal}
+          companyOptions={companyOptions}
         />
       )}
 
@@ -1142,9 +1146,10 @@ interface RequirementModalProps {
   getStatusColor: (status: string) => string
   showViewJDModal: boolean
   setShowViewJDModal: (show: boolean) => void
+  companyOptions: string[]
 }
 
-const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClose, onUpdate, getStatusColor, showViewJDModal, setShowViewJDModal }) => {
+const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClose, onUpdate, getStatusColor, showViewJDModal, setShowViewJDModal, companyOptions }) => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -1220,8 +1225,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
     'Urgent'
   ]
 
-  // Company enum options loaded from backend (database)
-  const [companyOptions, setCompanyOptions] = useState<string[]>([])
+  
 
   const formatEnumDisplay = (value?: string) => {
     if (!value) return ''

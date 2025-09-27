@@ -11,6 +11,9 @@ from app.models.user import User
 from app.database import db
 from app.models.meeting import Meeting
 from app.middleware.auth import require_admin
+from app.middleware.domain_auth import require_domain_auth, require_jwt_domain_auth, ensure_domain_isolation
+from app.services.database_manager import database_manager
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 import os
 from datetime import datetime, timedelta
 from sqlalchemy.orm import scoped_session
@@ -1611,7 +1614,7 @@ def upload_profiles():
 # Unified Authentication Endpoints
 @api_bp.route('/login', methods=['POST'])
 def login():
-    """Unified login for both admin and recruiter users"""
+    """Unified login for both admin and recruiter users with domain isolation"""
     try:
         current_app.logger.info("Login endpoint called")
         data = request.get_json()
@@ -1629,8 +1632,25 @@ def login():
                 'message': 'Username and password are required'
             }), 400
         
-        # Find user by username
-        user = User.query.filter_by(username=username).first()
+        # Ensure domain database isolation before authentication
+        if not ensure_domain_isolation():
+            current_app.logger.error("Failed to ensure domain database isolation")
+            return jsonify({
+                'status': 'error',
+                'message': 'Database not available for this domain'
+            }), 503
+        
+        # Get domain-specific database session
+        from flask import g
+        if not hasattr(g, 'db_session') or g.db_session is None:
+            current_app.logger.error("No database session available for domain")
+            return jsonify({
+                'status': 'error',
+                'message': 'Database session not available for this domain'
+            }), 503
+        
+        # Find user by username in domain-specific database
+        user = g.db_session.query(User).filter_by(username=username).first()
         current_app.logger.info(f"User found: {user}")
         
         if not user:
@@ -1648,10 +1668,14 @@ def login():
                 'message': 'Invalid username or password'
             }), 401
         
+        # Create JWT token
+        access_token = create_access_token(identity=username)
+        
         current_app.logger.info(f"Login successful for user: {username}")
         return jsonify({
             'status': 'success',
             'message': 'Login successful',
+            'access_token': access_token,
             'user': user.to_dict()
         })
         
@@ -1664,7 +1688,7 @@ def login():
 
 @api_bp.route('/signup', methods=['POST'])
 def signup():
-    """Unified signup for both admin and recruiter users"""
+    """Unified signup for both admin and recruiter users with domain isolation"""
     try:
         data = request.get_json()
         username = data.get('username')
@@ -1696,27 +1720,44 @@ def signup():
                     'message': 'phone_number must be a 10-digit number'
                 }), 400
         
-        # Check if username already exists
-        existing_user = User.query.filter_by(username=username).first()
+        # Ensure domain database isolation before user creation
+        if not ensure_domain_isolation():
+            current_app.logger.error("Failed to ensure domain database isolation")
+            return jsonify({
+                'status': 'error',
+                'message': 'Database not available for this domain'
+            }), 503
+        
+        # Get domain-specific database session
+        from flask import g
+        if not hasattr(g, 'db_session') or g.db_session is None:
+            current_app.logger.error("No database session available for domain")
+            return jsonify({
+                'status': 'error',
+                'message': 'Database session not available for this domain'
+            }), 503
+        
+        # Check if username already exists in domain-specific database
+        existing_user = g.db_session.query(User).filter_by(username=username).first()
         if existing_user:
             return jsonify({
                 'status': 'error',
                 'message': 'Username already exists'
             }), 409
         
-        # Check if email already exists (excluding temporary users)
-        existing_email = User.query.filter(User.email == email, User.username.notlike('temp_%')).first()
+        # Check if email already exists in domain-specific database (excluding temporary users)
+        existing_email = g.db_session.query(User).filter(User.email == email, User.username.notlike('temp_%')).first()
         if existing_email:
             return jsonify({
                 'status': 'error',
                 'message': 'Email already exists'
             }), 409
         
-        # Check if there's a temporary user with this email (indicating OTP verification)
-        temp_user = User.query.filter(User.email == email, User.username.like('temp_%')).first()
+        # Check if there's a temporary user with this email in domain-specific database (indicating OTP verification)
+        temp_user = g.db_session.query(User).filter(User.email == email, User.username.like('temp_%')).first()
         if not temp_user:
-            # Check if there's already a permanent user with this email
-            permanent_user = User.query.filter(User.email == email, User.username.notlike('temp_%')).first()
+            # Check if there's already a permanent user with this email in domain-specific database
+            permanent_user = g.db_session.query(User).filter(User.email == email, User.username.notlike('temp_%')).first()
             if permanent_user:
                 return jsonify({
                     'status': 'error',
@@ -1746,8 +1787,8 @@ def signup():
         # Set the new password
         temp_user.set_password(password)
         
-        # Commit the changes (no need to add/delete, just update)
-        db.session.commit()
+        # Commit the changes using domain-specific database session
+        g.db_session.commit()
         
         return jsonify({
             'status': 'success',
@@ -1757,7 +1798,8 @@ def signup():
         
     except Exception as e:
         current_app.logger.error(f"Error in signup: {str(e)}")
-        db.session.rollback()
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            g.db_session.rollback()
         
         # Check if it's a unique constraint violation
         if 'UniqueViolation' in str(e) or 'duplicate key' in str(e):
@@ -1778,42 +1820,29 @@ def signup():
         }), 500
 
 @api_bp.route('/auth/current-user', methods=['GET'])
+@require_jwt_domain_auth
 def get_current_user():
-    """Get current authenticated user information"""
+    """Get current authenticated user information with JWT and domain isolation"""
     try:
-        # Get user from request headers
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'error': 'No authorization header'}), 401
-        
-        try:
-            parts = auth_header.split(' ')
-            if len(parts) == 2 and parts[0] == 'Bearer':
-                username = parts[1].strip()
-                from app.models.user import User
-                # Try exact match first, then try with trailing space (for backward compatibility)
-                current_user = User.query.filter_by(username=username).first()
-                if not current_user:
-                    # Try with trailing space (for data inconsistency)
-                    current_user = User.query.filter_by(username=f"{username} ").first()
-                if not current_user:
-                    # Try without trailing space if username has one
-                    if username.endswith(' '):
-                        current_user = User.query.filter_by(username=username.rstrip()).first()
-                
-                if current_user:
-                    return jsonify(current_user.to_dict())
-                else:
-                    return jsonify({'error': 'User not found'}), 404
-            else:
-                return jsonify({'error': 'Invalid authorization header format'}), 401
-        except Exception as e:
-            current_app.logger.warning(f"Error parsing auth header: {str(e)}")
-            return jsonify({'error': 'Invalid authorization header'}), 401
+        # User is already authenticated and available in request context
+        user = getattr(request, 'current_user', None)
+        if user:
+            return jsonify({
+                'status': 'success',
+                'user': user.to_dict()
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'User not found'
+            }), 404
             
     except Exception as e:
         current_app.logger.error(f"Error getting current user: {str(e)}")
-        return jsonify({'error': 'Failed to get current user'}), 500
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to get current user'
+        }), 500
 
 @api_bp.route('/auth/send-otp', methods=['POST'])
 def send_otp():
@@ -2603,7 +2632,7 @@ def view_file():
 
 @api_bp.route('/recruiter/login', methods=['POST'])
 def recruiter_login():
-    """Login for existing recruiter"""
+    """Login for existing recruiter with domain isolation"""
     try:
         data = request.get_json()
         username = data.get('username')
@@ -2615,8 +2644,25 @@ def recruiter_login():
                 'message': 'Username and password are required'
             }), 400
         
-        # Find user by username
-        user = User.query.filter_by(username=username).first()
+        # Ensure domain database isolation before authentication
+        if not ensure_domain_isolation():
+            current_app.logger.error("Failed to ensure domain database isolation")
+            return jsonify({
+                'status': 'error',
+                'message': 'Database not available for this domain'
+            }), 503
+        
+        # Get domain-specific database session
+        from flask import g
+        if not hasattr(g, 'db_session') or g.db_session is None:
+            current_app.logger.error("No database session available for domain")
+            return jsonify({
+                'status': 'error',
+                'message': 'Database session not available for this domain'
+            }), 503
+        
+        # Find user by username in domain-specific database
+        user = g.db_session.query(User).filter_by(username=username).first()
         
         if not user or not user.check_password(password):
             return jsonify({
@@ -2624,9 +2670,13 @@ def recruiter_login():
                 'message': 'Invalid username or password'
             }), 401
         
+        # Create JWT token
+        access_token = create_access_token(identity=username)
+        
         return jsonify({
             'status': 'success',
             'message': 'Login successful',
+            'access_token': access_token,
             'user': user.to_dict()
         })
         
