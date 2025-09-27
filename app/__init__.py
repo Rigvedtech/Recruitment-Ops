@@ -115,6 +115,9 @@ def create_app(config_name='default'):
     def setup_domain_isolation():
         """Ensure domain-specific database session is available for API requests"""
         from flask import request
+        import logging
+        
+        logger = logging.getLogger(__name__)
         
         # Skip for static files and non-API endpoints
         if (request.endpoint and 
@@ -122,23 +125,39 @@ def create_app(config_name='default'):
              not request.path.startswith('/api/'))):
             return
         
-        # Skip for domain resolver API (it handles its own isolation)
-        if request.path.startswith('/api/domain/'):
+        # Skip for domain resolver API and domain test API (they handle their own isolation)
+        if request.path.startswith(('/api/domain/', '/api/domain-test/')):
             return
         
-        # Skip for localhost (uses default database)
+        # Get domain from headers
         domain = request.headers.get('X-Original-Domain')
         if not domain:
             domain = request.headers.get('X-Domain')
         
+        # Log the request for debugging
+        logger.info(f"API Request: {request.method} {request.path}, Domain: {domain}")
+        
+        # Skip for localhost (uses default database)
         if domain and not domain.startswith(('localhost', '127.0.0.1')):
             try:
+                logger.info(f"Setting up domain isolation for: {domain}")
+                
                 # Ensure domain database isolation is set up
-                from app.middleware.domain_auth import ensure_domain_isolation
-                ensure_domain_isolation()
+                from app.services.database_manager import database_manager
+                success = database_manager.ensure_domain_database_isolation()
+                
+                if success:
+                    logger.info(f"Domain isolation successfully set up for: {domain}")
+                else:
+                    logger.warning(f"Failed to set up domain isolation for: {domain}")
+                    
             except Exception as e:
                 # Log error but don't break the request - let it fall back to default DB
-                app.logger.warning(f"Could not set up domain isolation for {domain}: {str(e)}")
+                logger.error(f"Error setting up domain isolation for {domain}: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+        else:
+            logger.debug(f"Using default database for domain: {domain}")
     
     # Add security headers
     @app.after_request

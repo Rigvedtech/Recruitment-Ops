@@ -126,14 +126,31 @@ def setup_domain_aware_models():
         # Configure each model to use domain-aware queries
         for model in models:
             try:
-                # Set the custom query class
-                model.query_class = DomainAwareQuery
+                # Override the query property with a domain-aware version
+                original_query = model.query
+                
+                def create_domain_aware_query_property(model_class):
+                    @property
+                    def domain_aware_query(cls):
+                        # Check for domain-specific session first
+                        if has_request_context() and hasattr(g, 'db_session') and g.db_session is not None:
+                            logger.debug(f"Using domain session for {model_class.__name__} query")
+                            return g.db_session.query(model_class)
+                        else:
+                            logger.debug(f"Using default session for {model_class.__name__} query")
+                            return db.session.query(model_class)
+                    return domain_aware_query
+                
+                # Replace the query property
+                type(model).query = create_domain_aware_query_property(model)
                 
                 # Add the session getter method
-                model.get_session = classmethod(lambda cls: 
-                    g.db_session if (has_request_context() and hasattr(g, 'db_session') and g.db_session is not None) 
-                    else db.session
-                )
+                def get_session(cls):
+                    if has_request_context() and hasattr(g, 'db_session') and g.db_session is not None:
+                        return g.db_session
+                    return db.session
+                
+                model.get_session = classmethod(get_session)
                 
                 logger.debug(f"Configured domain-aware queries for model: {model.__name__}")
                 
