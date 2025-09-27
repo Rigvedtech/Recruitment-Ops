@@ -1,10 +1,10 @@
 'use client';
 
-import { useDomain } from '@/components/DomainProvider';
+import { useDomainResolver } from '@/hooks/useDomainResolver';
 import { useState } from 'react';
 
 export default function DomainTestPage() {
-  const { isResolved, isLoading, error, domain } = useDomain();
+  const { isResolved, isLoading, error, domain } = useDomainResolver();
   const [testResult, setTestResult] = useState<any>(null);
   const [testing, setTesting] = useState(false);
 

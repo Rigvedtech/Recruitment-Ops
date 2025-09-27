@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { EmailProvider } from '@/context/EmailContext';
 import NavigationWrapper from '@/components/NavigationWrapper';
-import { DomainProvider } from '@/components/DomainProvider';
+import { DomainProvider } from '@/context/DomainContext';
 
 const inter = Inter({ subsets: ['latin'] });
 

@@ -31,9 +31,17 @@ def create_app(config_name='default'):
 
     # Initialize CORS with security settings
     CORS(app, 
-         origins=['http://rgvdit-rops.rigvedtech.com:3000', 'http://localhost:3000', 'http://finq-ops.rigvedtech.com:3000'],
-         methods=['GET', 'POST', 'PUT', 'DELETE'],
-         allow_headers=['Content-Type', 'Authorization']
+         origins=[
+             'http://rgvdit-rops.rigvedtech.com:3000',
+             'https://rgvdit-rops.rigvedtech.com:3000',
+             'http://finquest-rops.rigvedtech.com:3000',
+             'https://finquest-rops.rigvedtech.com:3000',
+             'http://finq-ops.rigvedtech.com:3000',
+             'http://localhost:3000',
+             'http://127.0.0.1:3000'
+         ],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+         allow_headers=['Content-Type', 'Authorization', 'X-Original-Domain', 'X-Domain']
     )
     
     # Initialize JWT Manager

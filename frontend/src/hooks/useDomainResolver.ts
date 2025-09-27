@@ -20,11 +20,19 @@ export const useDomainResolver = () => {
       try {
         // Use the actual domain without any override
         const currentDomain = window.location.origin;
+        const domainHost = window.location.host;
         
         setState(prev => ({ ...prev, domain: currentDomain, isLoading: true }));
 
-        // Make API call to backend to resolve domain and initialize database
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010';
+        // Get API base URL based on domain
+        const getApiBaseUrl = () => {
+          if (domainHost.includes('rgvdit-rops') || domainHost.includes('finquest-rops')) {
+            return 'http://20.188.122.171:1976';
+          }
+          return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1976';
+        };
+
+        const API_BASE_URL = getApiBaseUrl();
         
         // Handle case where API_BASE_URL already includes /api
         const baseUrl = API_BASE_URL.endsWith('/api') ? API_BASE_URL : `${API_BASE_URL}/api`;
@@ -33,10 +41,12 @@ export const useDomainResolver = () => {
         console.log('DEBUG: API_BASE_URL =', API_BASE_URL);
         console.log('DEBUG: Base URL =', baseUrl);
         console.log('DEBUG: Full URL =', fullUrl);
+        console.log('DEBUG: Domain Host =', domainHost);
         
         const response = await fetch(fullUrl, {
           method: 'POST',
           headers: {
+            'X-Original-Domain': domainHost,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

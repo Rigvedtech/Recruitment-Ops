@@ -19,8 +19,13 @@ def require_domain_auth(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         try:
-            # Get domain from request
-            domain = database_manager.get_domain_from_request()
+            # Get domain from custom header or fallback to detection
+            domain = request.headers.get('X-Original-Domain')
+            if not domain:
+                domain = request.headers.get('X-Domain')
+            if not domain:
+                domain = database_manager.get_domain_from_request()
+            
             if not domain:
                 logger.error("Could not determine domain from request")
                 return jsonify({
@@ -125,8 +130,13 @@ def require_jwt_domain_auth(f):
                     'message': 'Invalid JWT token'
                 }), 401
             
-            # Get domain from request
-            domain = database_manager.get_domain_from_request()
+            # Get domain from custom header or fallback to detection
+            domain = request.headers.get('X-Original-Domain')
+            if not domain:
+                domain = request.headers.get('X-Domain')
+            if not domain:
+                domain = database_manager.get_domain_from_request()
+            
             if not domain:
                 logger.error("Could not determine domain from request")
                 return jsonify({

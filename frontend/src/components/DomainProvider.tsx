@@ -17,10 +17,10 @@ const DomainContext = createContext<DomainContextType>({
   domain: null
 });
 
-export const useDomain = () => {
+export const useDomainResolverContext = () => {
   const context = useContext(DomainContext);
   if (!context) {
-    throw new Error('useDomain must be used within a DomainProvider');
+    throw new Error('useDomainResolverContext must be used within a DomainProvider');
   }
   return context;
 };

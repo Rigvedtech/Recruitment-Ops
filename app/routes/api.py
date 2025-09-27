@@ -1632,9 +1632,14 @@ def login():
                 'message': 'Username and password are required'
             }), 400
         
+        # Get domain from custom header or fallback to detection
+        domain = request.headers.get('X-Original-Domain')
+        if not domain:
+            domain = request.headers.get('X-Domain')
+        
         # Ensure domain database isolation before authentication
         if not ensure_domain_isolation():
-            current_app.logger.error("Failed to ensure domain database isolation")
+            current_app.logger.error(f"Failed to ensure domain database isolation for domain: {domain}")
             return jsonify({
                 'status': 'error',
                 'message': 'Database not available for this domain'
@@ -1720,9 +1725,14 @@ def signup():
                     'message': 'phone_number must be a 10-digit number'
                 }), 400
         
+        # Get domain from custom header or fallback to detection
+        domain = request.headers.get('X-Original-Domain')
+        if not domain:
+            domain = request.headers.get('X-Domain')
+        
         # Ensure domain database isolation before user creation
         if not ensure_domain_isolation():
-            current_app.logger.error("Failed to ensure domain database isolation")
+            current_app.logger.error(f"Failed to ensure domain database isolation for domain: {domain}")
             return jsonify({
                 'status': 'error',
                 'message': 'Database not available for this domain'
@@ -2644,9 +2654,14 @@ def recruiter_login():
                 'message': 'Username and password are required'
             }), 400
         
+        # Get domain from custom header or fallback to detection
+        domain = request.headers.get('X-Original-Domain')
+        if not domain:
+            domain = request.headers.get('X-Domain')
+        
         # Ensure domain database isolation before authentication
         if not ensure_domain_isolation():
-            current_app.logger.error("Failed to ensure domain database isolation")
+            current_app.logger.error(f"Failed to ensure domain database isolation for domain: {domain}")
             return jsonify({
                 'status': 'error',
                 'message': 'Database not available for this domain'

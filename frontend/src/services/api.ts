@@ -8,27 +8,45 @@ interface StudentFilters {
     limit?: number;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010';
+// Get current domain
+const getCurrentDomain = () => {
+    if (typeof window !== 'undefined') {
+        return window.location.host;
+    }
+    return 'localhost:3000';
+};
 
-// Helper function to get auth headers
+// Get API base URL based on domain
+const getApiBaseUrl = () => {
+    const domain = getCurrentDomain();
+    if (domain.includes('rgvdit-rops') || domain.includes('finquest-rops')) {
+        return 'http://20.188.122.171:1976';
+    }
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1976';
+};
+
+const API_BASE_URL = getApiBaseUrl();
+
+// Helper function to get auth headers with domain
 const getAuthHeaders = () => {
+    const domain = getCurrentDomain();
+    const headers: Record<string, string> = {
+        'X-Original-Domain': domain,
+        'Content-Type': 'application/json',
+    };
+
     if (typeof window !== 'undefined') {
         const user = localStorage.getItem('user');
         if (user) {
             try {
                 const userData = JSON.parse(user);
-                return {
-                    'Authorization': `Bearer ${userData.username}`,
-                    'Content-Type': 'application/json',
-                };
+                headers['Authorization'] = `Bearer ${userData.username}`;
             } catch (e) {
                 console.error('Error parsing user data:', e);
             }
         }
     }
-    return {
-        'Content-Type': 'application/json',
-    };
+    return headers;
 };
 
 // Configure axios
@@ -39,10 +57,13 @@ const axiosApi = axios.create({
     },
 });
 
-// Add request interceptor to include auth headers
+// Add request interceptor to include auth headers and domain
 axiosApi.interceptors.request.use(
     (config) => {
         const authHeaders = getAuthHeaders();
+        // Add domain header
+        config.headers['X-Original-Domain'] = authHeaders['X-Original-Domain'];
+        // Add authorization header if present
         if ('Authorization' in authHeaders && authHeaders.Authorization) {
             config.headers.Authorization = authHeaders.Authorization;
         }
@@ -313,14 +334,16 @@ export async function updateTrackerRequirement(requestId: string, updates: any) 
     return response.json();
 }
 
-// Login function that doesn't require auth headers
+// Login function that includes domain header
 export async function login(username: string, password: string) {
-    console.log('Attempting login with:', { username, password });
+    const domain = getCurrentDomain();
+    console.log('Attempting login with:', { username, password, domain });
     console.log('API URL:', `${API_BASE_URL}/login`);
     
     const response = await fetch(`${API_BASE_URL}/login`, {
         method: 'POST',
         headers: {
+            'X-Original-Domain': domain,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ username, password }),
@@ -340,11 +363,13 @@ export async function login(username: string, password: string) {
     return data;
 }
 
-// Recruiter login function that doesn't require auth headers
+// Recruiter login function that includes domain header
 export async function recruiterLogin(username: string, password: string) {
+    const domain = getCurrentDomain();
     const response = await fetch(`${API_BASE_URL}/recruiter/login`, {
         method: 'POST',
         headers: {
+            'X-Original-Domain': domain,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ username, password }),

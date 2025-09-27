@@ -15,7 +15,7 @@ class DatabaseManager:
         self.api_client = None
         self._domain_mappings = {
             'rgvdit-rops.rigvedtech.com:3000': 'rigvedit_prod',
-            'finq-ops.rigvedtech.com:3000': 'finquest_recops',
+            'finquest-rops.rigvedtech.com:3000': 'finquest_recops',
             'localhost:3000': 'rigvedit_dev',
             '127.0.0.1:3000': 'rigvedit_dev'
         }
@@ -42,7 +42,19 @@ class DatabaseManager:
         Returns:
             Domain string (e.g., 'rgvdit-rops.rigvedtech.com:3000')
         """
-        # Get domain from request
+        # Check for custom domain header first (from frontend)
+        domain = request.headers.get('X-Original-Domain')
+        if domain:
+            logger.debug(f"Extracted domain from X-Original-Domain header: {domain}")
+            return domain
+        
+        # Check for alternative domain header
+        domain = request.headers.get('X-Domain')
+        if domain:
+            logger.debug(f"Extracted domain from X-Domain header: {domain}")
+            return domain
+        
+        # Fallback to Host header
         host = request.headers.get('Host', '')
         if not host:
             # Fallback to request host
@@ -50,7 +62,7 @@ class DatabaseManager:
             if request.port and request.port != 80 and request.port != 443:
                 host = f"{host}:{request.port}"
         
-        logger.debug(f"Extracted domain from request: {host}")
+        logger.debug(f"Extracted domain from Host header: {host}")
         return host
     
     def get_database_name_for_domain(self, domain: str) -> Optional[str]:
