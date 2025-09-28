@@ -78,12 +78,12 @@ def get_workflow_progress(request_id):
         ).all()
         
         # Get workflow data from the new models
-        screening_records = Screening.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        interview_scheduled_records = InterviewScheduled.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        interview_round_one_records = InterviewRoundOne.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        interview_round_two_records = InterviewRoundTwo.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        offer_records = Offer.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        onboarding_records = Onboarding.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        screening_records = get_db_session().query(Screening).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        interview_scheduled_records = get_db_session().query(InterviewScheduled).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        interview_round_one_records = get_db_session().query(InterviewRoundOne).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        interview_round_two_records = get_db_session().query(InterviewRoundTwo).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        offer_records = get_db_session().query(Offer).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        onboarding_records = get_db_session().query(Onboarding).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
         # Also check profile status for backward compatibility
         onboarded_profiles = [p for p in profiles if p.status and p.status.value == 'onboarded']
 
@@ -242,7 +242,7 @@ def update_workflow_step():
             try:
                 if step == 'screening':
                     # Create or update screening record
-                    screening = Screening.query.filter_by(
+                    screening = get_db_session().query(Screening).filter_by(
                         requirement_id=requirement.requirement_id,
                         profile_id=profile.profile_id
                     ).first()
@@ -263,7 +263,7 @@ def update_workflow_step():
                         screening.updated_by = current_user.user_id if current_user else None
                 
                 elif step == 'interview_scheduled':
-                    interview_scheduled = InterviewScheduled.query.filter_by(
+                    interview_scheduled = get_db_session().query(InterviewScheduled).filter_by(
                         requirement_id=requirement.requirement_id,
                         profile_id=profile.profile_id
                     ).first()
@@ -284,7 +284,7 @@ def update_workflow_step():
                         interview_scheduled.updated_by = current_user.user_id if current_user else None
                 
                 elif step == 'interview_round_1':
-                    round1 = InterviewRoundOne.query.filter_by(
+                    round1 = get_db_session().query(InterviewRoundOne).filter_by(
                         requirement_id=requirement.requirement_id,
                         profile_id=profile.profile_id
                     ).first()
@@ -305,7 +305,7 @@ def update_workflow_step():
                         round1.updated_by = current_user.user_id if current_user else None
                 
                 elif step == 'interview_round_2':
-                    round2 = InterviewRoundTwo.query.filter_by(
+                    round2 = get_db_session().query(InterviewRoundTwo).filter_by(
                         requirement_id=requirement.requirement_id,
                         profile_id=profile.profile_id
                     ).first()
@@ -326,7 +326,7 @@ def update_workflow_step():
                         round2.updated_by = current_user.user_id if current_user else None
                 
                 elif step == 'offered':
-                    offer = Offer.query.filter_by(
+                    offer = get_db_session().query(Offer).filter_by(
                         requirement_id=requirement.requirement_id,
                         profile_id=profile.profile_id
                     ).first()
@@ -345,7 +345,7 @@ def update_workflow_step():
                 
                 elif step == 'onboarding':
                     # Create or update onboarding record
-                    onboarding = Onboarding.query.filter_by(
+                    onboarding = get_db_session().query(Onboarding).filter_by(
                         requirement_id=requirement.requirement_id,
                         profile_id=profile.profile_id
                     ).first()
@@ -451,11 +451,11 @@ def get_workflow_state(request_id):
         ).all()
         
         # Get workflow data from the new models
-        screening_records = Screening.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        interview_scheduled_records = InterviewScheduled.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        interview_round_one_records = InterviewRoundOne.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        interview_round_two_records = InterviewRoundTwo.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
-        offer_records = Offer.query.filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        screening_records = get_db_session().query(Screening).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        interview_scheduled_records = get_db_session().query(InterviewScheduled).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        interview_round_one_records = get_db_session().query(InterviewRoundOne).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        interview_round_two_records = get_db_session().query(InterviewRoundTwo).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        offer_records = get_db_session().query(Offer).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
         
         # For onboarding, we'll use the profile status since onboarding table doesn't have profile_id
         onboarded_profiles = [p for p in profiles if p.status and p.status.value == 'onboarded']
@@ -644,11 +644,11 @@ def delete_workflow_progress(request_id):
             }), 404
         
         # Soft delete all workflow records for this requirement
-        Screening.query.filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
-        InterviewScheduled.query.filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
-        InterviewRoundOne.query.filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
-        InterviewRoundTwo.query.filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
-        Offer.query.filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
+        get_db_session().query(Screening).filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
+        get_db_session().query(InterviewScheduled).filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
+        get_db_session().query(InterviewRoundOne).filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
+        get_db_session().query(InterviewRoundTwo).filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
+        get_db_session().query(Offer).filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
         
         get_db_session().commit()
         
@@ -678,11 +678,11 @@ def reset_workflow_progress(request_id):
             }), 404
         
         # Reset all workflow records for this requirement
-        Screening.query.filter_by(requirement_id=requirement.requirement_id).delete()
-        InterviewScheduled.query.filter_by(requirement_id=requirement.requirement_id).delete()
-        InterviewRoundOne.query.filter_by(requirement_id=requirement.requirement_id).delete()
-        InterviewRoundTwo.query.filter_by(requirement_id=requirement.requirement_id).delete()
-        Offer.query.filter_by(requirement_id=requirement.requirement_id).delete()
+        get_db_session().query(Screening).filter_by(requirement_id=requirement.requirement_id).delete()
+        get_db_session().query(InterviewScheduled).filter_by(requirement_id=requirement.requirement_id).delete()
+        get_db_session().query(InterviewRoundOne).filter_by(requirement_id=requirement.requirement_id).delete()
+        get_db_session().query(InterviewRoundTwo).filter_by(requirement_id=requirement.requirement_id).delete()
+        get_db_session().query(Offer).filter_by(requirement_id=requirement.requirement_id).delete()
         
         # Reset profile statuses
         profiles = get_db_session().query(Profile).filter_by(requirement_id=requirement.requirement_id).all()

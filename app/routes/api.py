@@ -3091,11 +3091,11 @@ def get_enum_values():
         
         # Validate enum type
         valid_enum_types = {
-            'company': 'company_enum',
-            'department': 'department_enum', 
-            'shift': 'shift_enum',
-            'job_type': 'job_type_enum',
-            'priority': 'priority_enum'
+            'company': 'companyenum',
+            'department': 'departmentenum', 
+            'shift': 'shiftenum',
+            'job_type': 'jobtypeenum',
+            'priority': 'priorityenum'
         }
         
         if enum_type not in valid_enum_types:
@@ -3151,11 +3151,11 @@ def add_enum_value():
         
         # Validate enum type
         valid_enum_types = {
-            'company': 'company_enum',
-            'department': 'department_enum', 
-            'shift': 'shift_enum',
-            'job_type': 'job_type_enum',
-            'priority': 'priority_enum'
+            'company': 'companyenum',
+            'department': 'departmentenum', 
+            'shift': 'shiftenum',
+            'job_type': 'jobtypeenum',
+            'priority': 'priorityenum'
         }
         
         if enum_type not in valid_enum_types:
