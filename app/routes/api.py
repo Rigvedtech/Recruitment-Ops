@@ -571,12 +571,12 @@ def get_profiles_for_requirement(request_id):
     """Get all profiles for a specific requirement by request_id"""
     try:
         # First check if the requirement exists
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
         
         # Get all profiles linked to this requirement
-        profiles = Profile.query.filter(
+        profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.deleted_at.is_(None)
         ).all()
@@ -597,7 +597,7 @@ def get_profiles_for_requirement(request_id):
 def get_requirement_by_id(request_id):
     """Get a specific requirement by request_id"""
     try:
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
         
@@ -624,7 +624,7 @@ def get_profiles():
         per_page = request.args.get('per_page', 20, type=int)
         
         # Start with base query, excluding soft-deleted profiles
-        query = Profile.query.filter(Profile.deleted_at.is_(None))
+        query = get_db_session().query(Profile).filter(Profile.deleted_at.is_(None))
         
         # Apply search filter
         if search:
@@ -685,7 +685,7 @@ def get_profiles():
 def get_profile(student_id):
     """Get a specific profile by student_id"""
     try:
-        profile = Profile.query.filter(
+        profile = get_db_session().query(Profile).filter(
             Profile.student_id == student_id,
             Profile.deleted_at.is_(None)
         ).first_or_404()
@@ -698,7 +698,7 @@ def get_profile(student_id):
 def delete_profile(student_id):
     """Soft delete a profile by student_id"""
     try:
-        profile = Profile.query.filter(
+        profile = get_db_session().query(Profile).filter(
             Profile.student_id == student_id,
             Profile.deleted_at.is_(None)
         ).first_or_404()
@@ -788,7 +788,7 @@ def get_requirements():
     try:
         current_app.logger.info("Fetching all requirements")
         # Get manual requirements (these should always be included regardless of email subject)
-        manual_requirements = Requirement.query.filter(
+        manual_requirements = get_db_session().query(Requirement).filter(
             Requirement.requirement_id.isnot(None),
             Requirement.is_manual_requirement == True
         ).order_by(Requirement.created_at.desc()).all()
@@ -797,7 +797,7 @@ def get_requirements():
         # Join with EmailDetails to filter by email subject prefixes
         from app.models.email_details import EmailDetails
         automatic_requirements = (
-            Requirement.query.join(
+            get_db_session().query(Requirement).join(
                 EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id
             )
             .filter(
@@ -853,8 +853,8 @@ def get_requirements():
                 'priority': format_enum_for_display(r.priority),
                 'tentative_doj': r.tentative_doj.isoformat() if r.tentative_doj else None,
                 'additional_remarks': r.additional_remarks,
-                'assigned_to': User.query.filter_by(user_id=r.user_id).first().username if r.user_id else None,
-                'assigned_recruiters': [User.query.filter_by(user_id=r.user_id).first().username] if r.user_id else [],
+                'assigned_to': get_db_session().query(User).filter_by(user_id=r.user_id).first().username if r.user_id else None,
+                'assigned_recruiters': [get_db_session().query(User).filter_by(user_id=r.user_id).first().username] if r.user_id else [],
                 'is_manual_requirement': r.is_manual_requirement,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
                 'updated_at': r.updated_at.isoformat() if r.updated_at else None,
@@ -871,7 +871,7 @@ def get_requirements():
 def get_requirement(id):
     """Get a specific requirement by ID"""
     try:
-        requirement = Requirement.query.get_or_404(id)
+        requirement = get_db_session().query(Requirement).filter_by(id=id).first_or_404()
         return jsonify(requirement.to_dict())
     except Exception as e:
         current_app.logger.error(f"Error fetching requirement: {str(e)}")
@@ -881,7 +881,7 @@ def check_duplicate_requirement(data):
     """Check if a requirement with similar details already exists"""
     try:
         # Check for exact matches on key fields - fields are now strings, no conversion needed
-        exact_matches = Requirement.query.filter(
+        exact_matches = get_db_session().query(Requirement).filter(
             Requirement.job_title == data.get('job_title'),
             Requirement.company_name == data.get('company_name'),
             Requirement.department == data.get('department'),
@@ -899,7 +899,7 @@ def check_duplicate_requirement(data):
         similar_matches = []
         
         # Check by job title and company (most important fields)
-        title_company_matches = Requirement.query.filter(
+        title_company_matches = get_db_session().query(Requirement).filter(
             Requirement.job_title == data.get('job_title'),
             Requirement.company_name == data.get('company_name')
         ).all()
@@ -908,7 +908,7 @@ def check_duplicate_requirement(data):
             similar_matches.extend(title_company_matches)
         
         # Check by job title and department
-        title_dept_matches = Requirement.query.filter(
+        title_dept_matches = get_db_session().query(Requirement).filter(
             Requirement.job_title == data.get('job_title'),
             Requirement.department == data.get('department')
         ).all()
@@ -1155,7 +1155,7 @@ def bulk_upload_requirements():
             request_ids = []
 
             # Get the current max request_id (string like "Req003") with exclusive lock to prevent race conditions
-            latest_req = Requirement.query.with_for_update().order_by(Requirement.request_id.desc()).first()
+            latest_req = get_db_session().query(Requirement).with_for_update().order_by(Requirement.request_id.desc()).first()
 
             # Derive starting number from the string request_id, not the UUID primary key
             if latest_req and getattr(latest_req, 'request_id', None):
@@ -1174,7 +1174,7 @@ def bulk_upload_requirements():
                 # Double-check if the generated request_id already exists (extra safety)
                 while True:
                     candidate_id = f"Req{current_num:03d}"
-                    existing = Requirement.query.filter_by(request_id=candidate_id).first()
+                    existing = get_db_session().query(Requirement).filter_by(request_id=candidate_id).first()
                     if not existing:
                         request_ids.append(candidate_id)
                         current_num += 1
@@ -1482,7 +1482,7 @@ def update_requirement_jd():
             return jsonify({'success': False, 'error': 'File size too large. Maximum size is 10MB'}), 400
 
         # Find the requirement
-        requirement = Requirement.query.filter_by(requirement_id=requirement_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(requirement_id=requirement_id).first()
         if not requirement:
             return jsonify({'success': False, 'error': 'Requirement not found'}), 404
 
@@ -1914,7 +1914,7 @@ def send_otp():
             }), 400
         
         # Check if email already exists
-        existing_user = User.query.filter_by(email=email).first()
+        existing_user = get_db_session().query(User).filter_by(email=email).first()
         if existing_user:
             return jsonify({
                 'status': 'error',
@@ -2011,7 +2011,7 @@ def verify_otp():
             }), 400
         
         # Find the temporary user with the email and OTP
-        temp_user = User.query.filter_by(email=email, otp=otp).first()
+        temp_user = get_db_session().query(User).filter_by(email=email, otp=otp).first()
         
         if not temp_user:
             return jsonify({
@@ -2051,7 +2051,7 @@ def get_users():
     """Get all users (admin only)"""
     try:
         # Get all users from User table
-        users = User.query.all()
+        users = get_db_session().query(User).all()
         
         users_data = []
         for user in users:
@@ -2077,13 +2077,13 @@ def get_users():
 def delete_user(user_id):
     """Delete a user (admin only)"""
     try:
-        user = User.query.filter_by(id=str(user_id)).first()
+        user = get_db_session().query(User).filter_by(id=str(user_id)).first()
         if not user:
             return jsonify({'success': False, 'message': 'User not found'}), 404
         
         # Don't allow deleting the last admin
         if user.role == 'admin':
-            admin_count = User.query.filter_by(role='admin').count()
+            admin_count = get_db_session().query(User).filter_by(role='admin').count()
             if admin_count <= 1:
                 return jsonify({'success': False, 'message': 'Cannot delete the last admin user'}), 400
         
@@ -2107,12 +2107,12 @@ def export_profiles(request_id):
         from app.models.requirement import Requirement
         
         # Get the requirement first
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Request not found'}), 404
         
         # Get all profiles linked to this requirement
-        profiles = Profile.query.filter(
+        profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.deleted_at.is_(None)
         ).all()
@@ -2193,12 +2193,12 @@ def send_profiles_email(request_id):
         from app.models.requirement import Requirement
         
         # Get the requirement first
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Request not found'}), 404
         
         # Get all profiles linked to this requirement
-        all_profiles = Profile.query.filter(
+        all_profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.deleted_at.is_(None)
         ).all()
@@ -2268,7 +2268,7 @@ def update_profile(student_id):
 
         # Get the profile from database
         from app.models.profile import Profile
-        profile = Profile.query.filter(
+        profile = get_db_session().query(Profile).filter(
             Profile.student_id == student_id,
             Profile.deleted_at.is_(None)
         ).first()
@@ -2340,7 +2340,7 @@ def upload_resume(student_id):
 
         # Get the profile from database
         from app.models.profile import Profile
-        profile = Profile.query.filter(
+        profile = get_db_session().query(Profile).filter(
             Profile.student_id == student_id,
             Profile.deleted_at.is_(None)
         ).first()
@@ -2393,7 +2393,7 @@ def download_resume(student_id):
     try:
         # Get the profile from database
         from app.models.profile import Profile
-        profile = Profile.query.filter(
+        profile = get_db_session().query(Profile).filter(
             Profile.student_id == student_id,
             Profile.deleted_at.is_(None)
         ).first()
@@ -2786,7 +2786,7 @@ def get_recruiters():
     """Get all recruiter users for admin assignment"""
     try:
         current_app.logger.info("Fetching all recruiters")
-        recruiters = User.query.filter_by(role='recruiter').order_by(User.username).all()
+        recruiters = get_db_session().query(User).filter_by(role='recruiter').order_by(User.username).all()
         current_app.logger.info(f"Found {len(recruiters)} recruiters")
         
         result = [recruiter.to_dict() for recruiter in recruiters]
@@ -2825,7 +2825,7 @@ def create_teams_meeting():
         if not candidate_id and attendees and len(attendees) > 0:
             # Try to find the candidate profile to get student_id
             from app.models.profile import Profile
-            candidate_profile = Profile.query.filter_by(email_id=attendees[0]).first()
+            candidate_profile = get_db_session().query(Profile).filter_by(email_id=attendees[0]).first()
             if candidate_profile:
                 candidate_id = candidate_profile.student_id
         
@@ -2938,7 +2938,7 @@ def send_interview_email(request_id):
             return jsonify({'error': 'Missing required fields: recipient_email, subject, body'}), 400
         
         # Get requirement details
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
         
@@ -3226,7 +3226,7 @@ def get_recruiter_activity():
             start_date = end_date - timedelta(days=days-1)
         
         # Get all recruiters
-        recruiters = User.query.filter_by(role='recruiter').all()
+        recruiters = get_db_session().query(User).filter_by(role='recruiter').all()
         recruiter_usernames = [r.username for r in recruiters]
         
         # Get daily activity data
@@ -3256,7 +3256,7 @@ def get_recruiter_activity():
             for req in all_requirements:
                 if req.user_id:
                     # Get the user (recruiter) assigned to this requirement
-                    user = User.query.filter_by(user_id=req.user_id).first()
+                    user = get_db_session().query(User).filter_by(user_id=req.user_id).first()
                     if user:
                         requirement_recruiters[str(req.requirement_id)] = [user.username]
             
@@ -3264,7 +3264,7 @@ def get_recruiter_activity():
             profile_to_requirement = {}
             for profile in profiles_submitted:
                 # Get the requirement linked to this profile
-                requirement = Requirement.query.filter_by(requirement_id=profile.requirement_id).first() if hasattr(profile, 'requirement_id') else None
+                requirement = get_db_session().query(Requirement).filter_by(requirement_id=profile.requirement_id).first() if hasattr(profile, 'requirement_id') else None
                 if requirement:
                     profile_to_requirement[str(profile.profile_id)] = str(requirement.requirement_id)
             
@@ -3404,7 +3404,7 @@ def get_requirements_activity():
         week_start = today - timedelta(days=today.weekday())
         
         # Get total RFH count (all requirements with requirement_id)
-        total_rfh = Requirement.query.filter(
+        total_rfh = get_db_session().query(Requirement).filter(
             Requirement.requirement_id.isnot(None)
         ).count()
         
@@ -3457,7 +3457,7 @@ def send_inactive_recruiter_notifications():
                 'error': 'Authentication required'
             }), 401
         
-        user = User.query.filter_by(id=str(user_id)).first()
+        user = get_db_session().query(User).filter_by(id=str(user_id)).first()
         if not user or user.role != 'admin':
             return jsonify({
                 'success': False,
@@ -3493,7 +3493,7 @@ def get_inactive_recruiters():
                 'error': 'Authentication required'
             }), 401
         
-        user = User.query.filter_by(id=str(user_id)).first()
+        user = get_db_session().query(User).filter_by(id=str(user_id)).first()
         if not user or user.role != 'admin':
             return jsonify({
                 'success': False,
@@ -3536,7 +3536,7 @@ def get_scheduler_status_endpoint():
                 'error': 'Authentication required'
             }), 401
         
-        user = User.query.filter_by(id=str(user_id)).first()
+        user = get_db_session().query(User).filter_by(id=str(user_id)).first()
         if not user or user.role != 'admin':
             return jsonify({
                 'success': False,
@@ -3572,7 +3572,7 @@ def pause_scheduler_endpoint():
                 'error': 'Authentication required'
             }), 401
         
-        user = User.query.filter_by(id=str(user_id)).first()
+        user = get_db_session().query(User).filter_by(id=str(user_id)).first()
         if not user or user.role != 'admin':
             return jsonify({
                 'success': False,
@@ -3605,7 +3605,7 @@ def resume_scheduler_endpoint():
                 'error': 'Authentication required'
             }), 401
         
-        user = User.query.filter_by(id=str(user_id)).first()
+        user = get_db_session().query(User).filter_by(id=str(user_id)).first()
         if not user or user.role != 'admin':
             return jsonify({
                 'success': False,
@@ -3638,7 +3638,7 @@ def run_job_manually_endpoint(job_id):
                 'error': 'Authentication required'
             }), 401
         
-        user = User.query.filter_by(id=str(user_id)).first()
+        user = get_db_session().query(User).filter_by(id=str(user_id)).first()
         if not user or user.role != 'admin':
             return jsonify({
                 'success': False,

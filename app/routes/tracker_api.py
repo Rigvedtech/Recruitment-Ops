@@ -99,7 +99,7 @@ def get_breach_time_display(requirement_id):
     try:
         # Get the most recent breaching SLA tracker entry for this requirement
         from app.models.sla_tracker import SLAStatusEnum
-        breaching_tracker = SLATracker.query.filter_by(
+        breaching_tracker = get_db_session().query(SLATracker).filter_by(
             requirement_id=requirement_id,
             sla_status=SLAStatusEnum.breached
         ).order_by(SLATracker.sla_breach_hours.desc()).first()
@@ -329,14 +329,14 @@ def get_tracker_requirements():
         
         # Get manual requirements (these should always be included regardless of email subject)
         # Exclude project requirements from main tracker and soft-deleted requirements
-        manual_query = Requirement.query_active().filter(
+        manual_query = get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(
             Requirement.requirement_id.isnot(None),
             Requirement.is_manual_requirement == True
         )
         
         # Get automatic requirements (email-based) with existing filters, excluding soft-deleted
         from app.models.email_details import EmailDetails
-        automatic_query = Requirement.query_active().join(
+        automatic_query = get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).join(
             EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id
         ).filter(
             Requirement.requirement_id.isnot(None),
@@ -724,7 +724,7 @@ def update_tracker_requirement(request_id):
         # Handle assigned_to field specially for multiple recruiters
         old_recruiters = set()
         if requirement.user_id:
-            old_user = User.query.filter_by(user_id=requirement.user_id).first()
+            old_user = get_db_session().query(User).filter_by(user_id=requirement.user_id).first()
             if old_user:
                 old_recruiters = set([old_user.username])
         new_recruiters = set()
@@ -735,7 +735,7 @@ def update_tracker_requirement(request_id):
                 if data['assigned_to']:
                     # Get the first recruiter from the list
                     first_recruiter = data['assigned_to'][0]
-                    user = User.query.filter_by(username=first_recruiter).first()
+                    user = get_db_session().query(User).filter_by(username=first_recruiter).first()
                     if user:
                         # Only allow assignment to recruiters, not admins
                         if user.role.value != 'recruiter':
@@ -745,7 +745,7 @@ def update_tracker_requirement(request_id):
             else:
                 # If it's a single recruiter or string, set it directly
                 if data['assigned_to']:
-                    user = User.query.filter_by(username=data['assigned_to']).first()
+                    user = get_db_session().query(User).filter_by(username=data['assigned_to']).first()
                     if user:
                         # Only allow assignment to recruiters, not admins
                         if user.role.value != 'recruiter':
@@ -793,13 +793,13 @@ def update_tracker_requirement(request_id):
             assigned_recruiter = None
             if requirement.user_id:
                 # Get the user assigned to this requirement
-                user = User.query.filter_by(user_id=requirement.user_id).first()
+                user = get_db_session().query(User).filter_by(user_id=requirement.user_id).first()
                 assigned_recruiter = user.username if user else None
             
             # Get user_id for the assigned recruiter
             user_id = None
             if assigned_recruiter:
-                user = User.query.filter_by(username=assigned_recruiter).first()
+                user = get_db_session().query(User).filter_by(username=assigned_recruiter).first()
                 if user:
                     user_id = str(user.user_id)
             
@@ -954,7 +954,7 @@ def get_archived_requirements():
             return jsonify({'error': 'Only administrators can view archived requirements'}), 403
         
         # Get all archived requirements
-        archived_requirements = Requirement.query_deleted_only().order_by(Requirement.deleted_at.desc()).all()
+        archived_requirements = get_db_session().query(Requirement).filter(Requirement.deleted_at.isnot(None)).order_by(Requirement.deleted_at.desc()).all()
         
         return jsonify([req.to_dict() for req in archived_requirements])
         
@@ -986,29 +986,29 @@ def get_tracker_stats():
         # Combine counts for both manual and automatic requirements (excluding soft-deleted)
         # For automatic requirements, we need to join with EmailDetails
         from app.models.email_details import EmailDetails
-        automatic_query_base = Requirement.query_active().join(EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id)
+        automatic_query_base = get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).join(EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id)
         
-        total_rfh = Requirement.query_active().filter(*manual_base_filter).count() + automatic_query_base.filter(*automatic_base_filter).count()
+        total_rfh = get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter).count() + automatic_query_base.filter(*automatic_base_filter).count()
         
-        open_rfh = (Requirement.query_active().filter(*manual_base_filter, Requirement.status == 'Open').count() + 
+        open_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Open').count() + 
                    automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Open').count())
         
-        candidate_submission_rfh = (Requirement.query_active().filter(*manual_base_filter, Requirement.status == 'Candidate_Submission').count() + 
+        candidate_submission_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Candidate_Submission').count() + 
                                    automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Candidate_Submission').count())
         
-        interview_scheduled_rfh = (Requirement.query_active().filter(*manual_base_filter, Requirement.status == 'Interview_Scheduled').count() + 
+        interview_scheduled_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Interview_Scheduled').count() + 
                                   automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Interview_Scheduled').count())
         
-        offer_recommendation_rfh = (Requirement.query_active().filter(*manual_base_filter, Requirement.status == 'Offer_Recommendation').count() + 
+        offer_recommendation_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Offer_Recommendation').count() + 
                                    automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Offer_Recommendation').count())
         
-        on_boarding_rfh = (Requirement.query_active().filter(*manual_base_filter, Requirement.status == 'On_Boarding').count() + 
+        on_boarding_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'On_Boarding').count() + 
                           automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'On_Boarding').count())
         
-        on_hold_rfh = (Requirement.query_active().filter(*manual_base_filter, Requirement.status == 'On_Hold').count() + 
+        on_hold_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'On_Hold').count() + 
                       automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'On_Hold').count())
         
-        closed_rfh = (Requirement.query_active().filter(*manual_base_filter, Requirement.status == 'Closed').count() + 
+        closed_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Closed').count() + 
                      automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Closed').count())
         
         return jsonify({
@@ -1041,7 +1041,7 @@ def get_tracker_relationships():
     try:
         # Get all requirements with their linked profiles (excluding reply emails)
         from app.models.email_details import EmailDetails
-        requirements = Requirement.query.join(
+        requirements = get_db_session().query(Requirement).join(
             EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id
         ).filter(
             ~EmailDetails.email_subject.like('Re:%'),
@@ -1172,7 +1172,7 @@ def get_tracker_relationships_by_student(student_id):
     """Get all requirements associated with a specific student profile"""
     try:
         # First find the profile by student_id
-        profile = Profile.query.filter(
+        profile = get_db_session().query(Profile).filter(
             Profile.student_id == student_id,
             Profile.deleted_at.is_(None)
         ).first()
@@ -1187,7 +1187,7 @@ def get_tracker_relationships_by_student(student_id):
                 'requirements': []
             })
 
-        requirement = Requirement.query.filter_by(requirement_id=profile.requirement_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(requirement_id=profile.requirement_id).first()
         if not requirement:
             return jsonify({
                 'student_id': student_id,
@@ -1229,7 +1229,7 @@ def get_tracker_relationship_stats():
     """Get statistics about relationships between requirements and profiles"""
     try:
         # Count total relationships (profiles linked to requirements)
-        total_relationships = Profile.query.filter(
+        total_relationships = get_db_session().query(Profile).filter(
             Profile.requirement_id.isnot(None),
             Profile.deleted_at.is_(None)
         ).count()
@@ -1241,7 +1241,7 @@ def get_tracker_relationship_stats():
         ).distinct().count()
         
         # Count unique profiles
-        unique_profiles = Profile.query.filter(
+        unique_profiles = get_db_session().query(Profile).filter(
             Profile.deleted_at.is_(None)
         ).count()
         
@@ -1258,7 +1258,7 @@ def get_tracker_relationship_stats():
         ).limit(10).all()
         
         for req_id, count in requirement_counts:
-            requirement = Requirement.query.filter_by(requirement_id=req_id).first()
+            requirement = get_db_session().query(Requirement).filter_by(requirement_id=req_id).first()
             if requirement:
                 top_requirements.append({
                     'request_id': requirement.requirement_id,
@@ -1268,13 +1268,13 @@ def get_tracker_relationship_stats():
         
         # Get recent extractions
         recent_extractions = []
-        recent_profiles = Profile.query.filter(
+        recent_profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id.isnot(None),
             Profile.deleted_at.is_(None)
         ).order_by(Profile.created_at.desc()).limit(10).all()
         
         for profile in recent_profiles:
-            requirement = Requirement.query.filter_by(requirement_id=profile.requirement_id).first()
+            requirement = get_db_session().query(Requirement).filter_by(requirement_id=profile.requirement_id).first()
             if requirement:
                 recent_extractions.append({
                     'request_id': requirement.requirement_id,
@@ -1402,7 +1402,7 @@ def get_requirements_with_categories():
     """Get all requirements with their automatically detected categories"""
     try:
         from app.models.email_details import EmailDetails
-        requirements = Requirement.query.join(
+        requirements = get_db_session().query(Requirement).join(
             EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id
         ).filter(
             Requirement.requirement_id.isnot(None),
@@ -1568,7 +1568,7 @@ def get_profiles_count():
         
         # Get manual requirements (these should always be included regardless of email subject)
         # Exclude project requirements from main tracker
-        manual_query = Requirement.query.filter(
+        manual_query = get_db_session().query(Requirement).filter(
             Requirement.requirement_id.isnot(None),
             Requirement.is_manual_requirement == True,
             
@@ -1746,7 +1746,7 @@ def get_closed_requirements():
         from app.models.user import User
         
         # Get all closed requirements
-        closed_requirements = Requirement.query.filter_by(status='Closed').all()
+        closed_requirements = get_db_session().query(Requirement).filter_by(status='Closed').all()
         
         closed_data = []
         for requirement in closed_requirements:
@@ -1764,7 +1764,7 @@ def get_closed_requirements():
             # Get assigned recruiter name instead of count
             recruiter_name = None
             if requirement.user_id:
-                recruiter = User.query.filter_by(user_id=requirement.user_id).first()
+                recruiter = get_db_session().query(User).filter_by(user_id=requirement.user_id).first()
                 if recruiter:
                     recruiter_name = recruiter.full_name
             
@@ -1831,7 +1831,7 @@ def create_profiles():
                     student_id = f"STU{next_number:03d}"
                     
                     # Check if this ID already exists
-                    existing = Profile.query.filter_by(student_id=student_id).first()
+                    existing = get_db_session().query(Profile).filter_by(student_id=student_id).first()
                     if not existing:
                         return student_id
                         
@@ -1853,14 +1853,14 @@ def create_profiles():
             # Check for duplicates across the entire database by email OR contact
             if email_id and '@' in str(email_id):
                 # Check by email
-                existing_profile = Profile.query.filter(Profile.email_id == email_id).first()
+                existing_profile = get_db_session().query(Profile).filter(Profile.email_id == email_id).first()
                 if existing_profile:
                     current_app.logger.info(f"Duplicate profile found by email match: {candidate_name} (Email: {email_id})")
                     return True
             
             # If no email match found, check by contact
             if contact_no:
-                existing_profile = Profile.query.filter(Profile.contact_no == contact_no).first()
+                existing_profile = get_db_session().query(Profile).filter(Profile.contact_no == contact_no).first()
                 if existing_profile:
                     current_app.logger.info(f"Duplicate profile found by contact match: {candidate_name} (Contact: {contact_no})")
                     return True
@@ -1946,7 +1946,7 @@ def create_profiles():
         # Update profiles to link them to the requirement
         for student_id in student_ids:
             # Get the profile UUID for this student_id
-            profile = Profile.query.filter(
+            profile = get_db_session().query(Profile).filter(
                 Profile.student_id == student_id,
                 Profile.deleted_at.is_(None)
             ).first()
@@ -2067,8 +2067,8 @@ def move_profile():
         # Check permissions
         if current_user and current_user.role.value == 'recruiter':
             # For recruiters, check if they have access to both requirements
-            from_requirement = Requirement.query.filter_by(request_id=from_request_id).first()
-            to_requirement = Requirement.query.filter_by(request_id=to_request_id).first()
+            from_requirement = get_db_session().query(Requirement).filter_by(request_id=from_request_id).first()
+            to_requirement = get_db_session().query(Requirement).filter_by(request_id=to_request_id).first()
             
             if not from_requirement or not to_requirement:
                 return jsonify({'success': False, 'error': 'One or both requirements not found'}), 404
@@ -2085,7 +2085,7 @@ def move_profile():
         # TODO: Implement proper profile movement using the new schema
         
         # Get the profile
-        profile = Profile.query.filter(
+        profile = get_db_session().query(Profile).filter(
             Profile.profile_id == profile_id,
             Profile.deleted_at.is_(None)
         ).first()
@@ -2098,7 +2098,7 @@ def move_profile():
             }), 404
         
         # Get the target requirement
-        target_requirement = Requirement.query.filter_by(request_id=to_request_id).first()
+        target_requirement = get_db_session().query(Requirement).filter_by(request_id=to_request_id).first()
         if not target_requirement:
             return jsonify({
                 'success': False,
@@ -2175,7 +2175,7 @@ def can_move_profile(profile_id, request_id):
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
         # Get the profile to find its current requirement
-        profile = Profile.query.filter(
+        profile = get_db_session().query(Profile).filter(
             Profile.profile_id == profile_id,
             Profile.deleted_at.is_(None)
         ).first()
@@ -2195,7 +2195,7 @@ def can_move_profile(profile_id, request_id):
                 'error_code': 'PROFILE_NOT_ASSOCIATED'
             }), 404
         
-        current_requirement = Requirement.query.filter_by(requirement_id=profile.requirement_id).first()
+        current_requirement = get_db_session().query(Requirement).filter_by(requirement_id=profile.requirement_id).first()
         if not current_requirement:
             return jsonify({
                 'can_move': False,
@@ -2206,7 +2206,7 @@ def can_move_profile(profile_id, request_id):
         from_request_id = current_requirement.requirement_id
         
         # Simple validation - check if target requirement exists and is not closed
-        target_requirement = Requirement.query.filter_by(request_id=request_id).first()
+        target_requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not target_requirement:
             return jsonify({
                 'can_move': False,
@@ -2226,7 +2226,7 @@ def can_move_profile(profile_id, request_id):
         if validation_result['valid']:
             # Check permissions if user is a recruiter
             if current_user and current_user.role.value == 'recruiter':
-                target_requirement = Requirement.query.filter_by(request_id=request_id).first()
+                target_requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
                 if target_requirement:
                     from_assigned = current_requirement.is_assigned_to(current_user.username)
                     to_assigned = target_requirement.is_assigned_to(current_user.username)

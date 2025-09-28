@@ -117,8 +117,8 @@ class NotificationService:
                 expires_at=expires_at
             )
             
-        get_db_session().add(notification)
-        get_db_session().commit()
+            get_db_session().add(notification)
+            get_db_session().commit()
             
             current_app.logger.info(f"Created notification {notification.id} for user {user_id}: {notification_type}")
             return notification
@@ -172,13 +172,14 @@ class NotificationService:
                 expires_at=expires_at
             )
             
-        get_db_session().add(notification)
-        get_db_session().commit()
+            get_db_session().add(notification)
+            get_db_session().commit()
             
             current_app.logger.info(f"Created notification {notification.id} for user {user.username}: sla_breach")
             return notification
             
         except Exception as e:
+            get_db_session().rollback()
             current_app.logger.error(f"Error creating SLA breach notification: {str(e)}")
             return None
     
@@ -222,13 +223,14 @@ class NotificationService:
                 expires_at=expires_at
             )
             
-        get_db_session().add(notification)
-        get_db_session().commit()
+            get_db_session().add(notification)
+            get_db_session().commit()
             
             current_app.logger.info(f"Created notification {notification.id} for user {user.username}: new_assignment")
             return notification
             
         except Exception as e:
+            get_db_session().rollback()
             current_app.logger.error(f"Error creating assignment notification: {str(e)}")
             return None
     
