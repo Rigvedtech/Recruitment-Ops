@@ -20,15 +20,38 @@ def get_db_session():
     try:
         # Check if we have a domain-specific session
         if hasattr(g, 'db_session') and g.db_session is not None:
-            return g.db_session
+            # Verify it's a valid session object
+            if hasattr(g.db_session, 'query'):
+                return g.db_session
         
         # Fallback to global session for backward compatibility
-        return db.session
+        # Get the actual session from Flask-SQLAlchemy
+        try:
+            # This gets the actual SQLAlchemy session
+            session = db.session
+            if hasattr(session, 'query'):
+                return session
+            else:
+                current_app.logger.error("db.session does not have query method")
+                # Try to create a new session from the engine
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+        except Exception as session_error:
+            current_app.logger.error(f"Error accessing db.session: {str(session_error)}")
+            # Last resort: try to create session from engine
+            try:
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+            except Exception as engine_error:
+                current_app.logger.error(f"Error creating session from engine: {str(engine_error)}")
+                raise Exception("Cannot create database session")
         
     except Exception as e:
-        # If there's any error, fall back to global session
-        current_app.logger.error(f"Error in get_db_session: {str(e)}")
-        return db.session
+        # If there's any error, log it and re-raise
+        current_app.logger.error(f"Critical error in get_db_session: {str(e)}")
+        raise e
 
 def format_enum_for_display(value):
     """Convert database enum values to user-friendly display format"""
@@ -43,7 +66,7 @@ def _get_assigned_user_display(user_id):
     """Get the display name for assigned user, showing 'Unassigned' if admin is assigned"""
     if not user_id:
         return None
-    user = User.query.filter_by(user_id=user_id).first()
+    user = get_db_session().query(User).filter_by(user_id=user_id).first()
     if not user:
         return None
     # Only show recruiters, not admins
@@ -56,7 +79,7 @@ def _get_assigned_recruiters_display(user_id):
     """Get the list of assigned recruiters, excluding admins"""
     if not user_id:
         return []
-    user = User.query.filter_by(user_id=user_id).first()
+    user = get_db_session().query(User).filter_by(user_id=user_id).first()
     if not user:
         return []
     # Only include recruiters, not admins
@@ -109,7 +132,7 @@ def get_category_for_requirement(requirement):
     email_body = requirement.additional_remarks or ''
     
     # First check if profiles were extracted from this email by looking at profiles linked to this requirement
-    profiles_count = Profile.query.filter_by(requirement_id=requirement.requirement_id).count()
+    profiles_count = get_db_session().query(Profile).filter_by(requirement_id=requirement.requirement_id).count()
     if profiles_count > 0:
         # If profiles were extracted, this is definitely a candidate submission
         current_app.logger.info(f"Found {profiles_count} profiles linked to requirement {requirement.requirement_id}, categorizing as candidate_submission")
@@ -293,14 +316,14 @@ def get_tracker_requirements():
                     username = parts[1].strip()  # Trim whitespace from username
                     from app.models.user import User
                     # Try exact match first, then try with trailing space (for backward compatibility)
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
                         # Try with trailing space (for data inconsistency)
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         # Try without trailing space if username has one
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
@@ -593,7 +616,7 @@ def get_tracker_requirements():
 def get_tracker_requirement(request_id):
     """Get a specific tracker requirement by request_id"""
     try:
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
         
@@ -608,12 +631,12 @@ def get_profiles_for_request(request_id):
     """Get all profiles associated with a specific request_id"""
     try:
         # First check if the requirement exists
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
         
         # Get all profiles linked to this requirement
-        profiles = Profile.query.filter(
+        profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.deleted_at.is_(None)
         ).all()
@@ -640,7 +663,9 @@ def get_profiles_for_request(request_id):
 def update_tracker_requirement(request_id):
     """Update a requirement's tracker fields (status, assigned_to, notes)"""
     try:
-        requirement = Requirement.query.filter_by(request_id=request_id).first_or_404()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
+        if not requirement:
+            return jsonify({'error': 'Requirement not found'}), 404
         
         data = request.get_json()
         if not data:
@@ -656,12 +681,12 @@ def update_tracker_requirement(request_id):
                 if len(parts) == 2 and parts[0] == 'Bearer':
                     username = parts[1].strip()
                     from app.models.user import User
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
@@ -811,12 +836,12 @@ def delete_tracker_requirement(request_id):
                 if len(parts) == 2 and parts[0] == 'Bearer':
                     username = parts[1].strip()
                     from app.models.user import User
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
@@ -825,7 +850,7 @@ def delete_tracker_requirement(request_id):
             return jsonify({'error': 'Only administrators can archive requirements'}), 403
         
         # Get the requirement (including already soft-deleted ones)
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
         
@@ -863,12 +888,12 @@ def restore_tracker_requirement(request_id):
                 if len(parts) == 2 and parts[0] == 'Bearer':
                     username = parts[1].strip()
                     from app.models.user import User
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
@@ -877,7 +902,7 @@ def restore_tracker_requirement(request_id):
             return jsonify({'error': 'Only administrators can restore archived requirements'}), 403
         
         # Get the requirement (including soft-deleted ones)
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
         
@@ -915,12 +940,12 @@ def get_archived_requirements():
                 if len(parts) == 2 and parts[0] == 'Bearer':
                     username = parts[1].strip()
                     from app.models.user import User
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
@@ -1047,7 +1072,7 @@ def get_tracker_relationships():
                 }
             
             # Get profiles linked to this requirement
-            profiles = Profile.query.filter(
+            profiles = get_db_session().query(Profile).filter(
                 Profile.requirement_id == requirement.requirement_id,
                 Profile.deleted_at.is_(None)
             ).all()
@@ -1080,7 +1105,7 @@ def get_tracker_relationships_by_request(request_id):
     """Get all profiles associated with a specific requirement"""
     try:
         # Get the requirement
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({
                 'request_id': request_id,
@@ -1089,7 +1114,7 @@ def get_tracker_relationships_by_request(request_id):
             })
         
         # Get all profiles linked to this requirement
-        profiles = Profile.query.filter(
+        profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.deleted_at.is_(None)
         ).all()
@@ -1478,7 +1503,7 @@ def get_emails_for_request(request_id):
     """Get all emails for a specific request_id"""
     try:
         # First, get the requirement to find the thread_id
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Request ID not found'}), 404
         
@@ -1530,14 +1555,14 @@ def get_profiles_count():
                     username = parts[1].strip()  # Trim whitespace from username
                     from app.models.user import User
                     # Try exact match first, then try with trailing space (for backward compatibility)
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
                         # Try with trailing space (for data inconsistency)
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         # Try without trailing space if username has one
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
@@ -1597,7 +1622,7 @@ def get_profiles_count():
         
         for req in requirements:
             # Get profiles linked to this requirement
-            profiles = Profile.query.filter(
+            profiles = get_db_session().query(Profile).filter(
                 Profile.requirement_id == req.requirement_id,
                 Profile.deleted_at.is_(None)
             ).all()
@@ -1662,12 +1687,12 @@ def update_onboarding_status():
             return jsonify({'success': False, 'message': 'No request_id provided'}), 400
         
         # Get the requirement
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'success': False, 'message': 'Requirement not found'}), 404
         
         # Get all profiles linked to this requirement
-        profiles = Profile.query.filter(
+        profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.deleted_at.is_(None)
         ).all()
@@ -1699,7 +1724,7 @@ def close_requirement(request_id):
     """Close a requirement and set closed_at timestamp"""
     try:
         # Get the requirement
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'success': False, 'message': 'Requirement not found'}), 404
         
@@ -1726,7 +1751,7 @@ def get_closed_requirements():
         closed_data = []
         for requirement in closed_requirements:
             # Get profiles linked to this requirement
-            profiles = Profile.query.filter(
+            profiles = get_db_session().query(Profile).filter(
                 Profile.requirement_id == requirement.requirement_id,
                 Profile.deleted_at.is_(None)
             ).all()
@@ -1779,7 +1804,7 @@ def create_profiles():
             return jsonify({'success': False, 'message': 'No request_id provided'}), 400
         
         # Check if requirement exists
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'success': False, 'message': 'Requirement not found'}), 404
         
@@ -1863,7 +1888,7 @@ def create_profiles():
                         parts = auth_header.split(' ')
                         if len(parts) == 2 and parts[0] == 'Bearer':
                             username = parts[1]
-                            current_user = User.query.filter_by(username=username).first()
+                            current_user = get_db_session().query(User).filter_by(username=username).first()
                     except Exception as e:
                         current_app.logger.warning(f"Error getting current user: {str(e)}")
                 
@@ -1930,7 +1955,7 @@ def create_profiles():
                 continue
 
             # Get the requirement UUID for this request_id
-            requirement = Requirement.query.filter_by(request_id=request_id).first()
+            requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
             if not requirement:
                 current_app.logger.error(f"Requirement not found for request_id: {request_id}")
                 continue
@@ -2027,12 +2052,12 @@ def move_profile():
                 if len(parts) == 2 and parts[0] == 'Bearer':
                     username = parts[1].strip()
                     from app.models.user import User
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
                     
                     if current_user:
                         moved_by_user = current_user.username
@@ -2140,12 +2165,12 @@ def can_move_profile(profile_id, request_id):
                 if len(parts) == 2 and parts[0] == 'Bearer':
                     username = parts[1].strip()
                     from app.models.user import User
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         

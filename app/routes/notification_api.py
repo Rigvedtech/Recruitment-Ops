@@ -13,15 +13,38 @@ def get_db_session():
     try:
         # Check if we have a domain-specific session
         if hasattr(g, 'db_session') and g.db_session is not None:
-            return g.db_session
+            # Verify it's a valid session object
+            if hasattr(g.db_session, 'query'):
+                return g.db_session
         
         # Fallback to global session for backward compatibility
-        return db.session
+        # Get the actual session from Flask-SQLAlchemy
+        try:
+            # This gets the actual SQLAlchemy session
+            session = db.session
+            if hasattr(session, 'query'):
+                return session
+            else:
+                current_app.logger.error("db.session does not have query method")
+                # Try to create a new session from the engine
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+        except Exception as session_error:
+            current_app.logger.error(f"Error accessing db.session: {str(session_error)}")
+            # Last resort: try to create session from engine
+            try:
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+            except Exception as engine_error:
+                current_app.logger.error(f"Error creating session from engine: {str(engine_error)}")
+                raise Exception("Cannot create database session")
         
     except Exception as e:
-        # If there's any error, fall back to global session
-        current_app.logger.error(f"Error in get_db_session: {str(e)}")
-        return db.session
+        # If there's any error, log it and re-raise
+        current_app.logger.error(f"Critical error in get_db_session: {str(e)}")
+        raise e
 
 notification_bp = Blueprint('notifications', __name__, url_prefix='/api/notifications')
 
@@ -209,12 +232,12 @@ def create_test_notification():
             return jsonify({'error': 'admin_user_id and target_user_id are required'}), 400
         
         # Validate admin user
-        admin_user = User.query.filter_by(user_id=admin_user_id).first()
+        admin_user = get_db_session().query(User).filter_by(user_id=admin_user_id).first()
         if not admin_user or admin_user.role.value != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
 
         # Validate target user
-        target_user = User.query.filter_by(user_id=target_user_id).first()
+        target_user = get_db_session().query(User).filter_by(user_id=target_user_id).first()
         if not target_user:
             return jsonify({'error': 'Target user not found'}), 404
 
@@ -293,7 +316,7 @@ def get_all_notifications_admin():
         notification_type = request.args.get('type')
         
         # Build query
-        query = Notification.query
+        query = get_db_session().query(Notification)
         
         if notification_type:
             query = query.filter_by(type=notification_type)

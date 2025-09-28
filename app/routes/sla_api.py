@@ -16,15 +16,38 @@ def get_db_session():
     try:
         # Check if we have a domain-specific session
         if hasattr(g, 'db_session') and g.db_session is not None:
-            return g.db_session
+            # Verify it's a valid session object
+            if hasattr(g.db_session, 'query'):
+                return g.db_session
         
         # Fallback to global session for backward compatibility
-        return db.session
+        # Get the actual session from Flask-SQLAlchemy
+        try:
+            # This gets the actual SQLAlchemy session
+            session = db.session
+            if hasattr(session, 'query'):
+                return session
+            else:
+                current_app.logger.error("db.session does not have query method")
+                # Try to create a new session from the engine
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+        except Exception as session_error:
+            current_app.logger.error(f"Error accessing db.session: {str(session_error)}")
+            # Last resort: try to create session from engine
+            try:
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+            except Exception as engine_error:
+                current_app.logger.error(f"Error creating session from engine: {str(engine_error)}")
+                raise Exception("Cannot create database session")
         
     except Exception as e:
-        # If there's any error, fall back to global session
-        current_app.logger.error(f"Error in get_db_session: {str(e)}")
-        return db.session
+        # If there's any error, log it and re-raise
+        current_app.logger.error(f"Critical error in get_db_session: {str(e)}")
+        raise e
 
 sla_bp = Blueprint('sla', __name__, url_prefix='/api/sla')
 

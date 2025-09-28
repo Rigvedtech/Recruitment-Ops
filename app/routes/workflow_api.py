@@ -22,15 +22,38 @@ def get_db_session():
     try:
         # Check if we have a domain-specific session
         if hasattr(g, 'db_session') and g.db_session is not None:
-            return g.db_session
+            # Verify it's a valid session object
+            if hasattr(g.db_session, 'query'):
+                return g.db_session
         
         # Fallback to global session for backward compatibility
-        return db.session
+        # Get the actual session from Flask-SQLAlchemy
+        try:
+            # This gets the actual SQLAlchemy session
+            session = db.session
+            if hasattr(session, 'query'):
+                return session
+            else:
+                current_app.logger.error("db.session does not have query method")
+                # Try to create a new session from the engine
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+        except Exception as session_error:
+            current_app.logger.error(f"Error accessing db.session: {str(session_error)}")
+            # Last resort: try to create session from engine
+            try:
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+            except Exception as engine_error:
+                current_app.logger.error(f"Error creating session from engine: {str(engine_error)}")
+                raise Exception("Cannot create database session")
         
     except Exception as e:
-        # If there's any error, fall back to global session
-        current_app.logger.error(f"Error in get_db_session: {str(e)}")
-        return db.session
+        # If there's any error, log it and re-raise
+        current_app.logger.error(f"Critical error in get_db_session: {str(e)}")
+        raise e
 
 workflow_bp = Blueprint('workflow', __name__, url_prefix='/api')
 
@@ -40,7 +63,7 @@ def get_workflow_progress(request_id):
     """Get workflow progress for a specific request"""
     try:
         # Validate request_id exists
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({
                 'success': False,
@@ -49,7 +72,7 @@ def get_workflow_progress(request_id):
             }), 404
         
         # Get profiles linked to this requirement
-        profiles = Profile.query.filter(
+        profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.deleted_at.is_(None)
         ).all()
@@ -183,7 +206,7 @@ def update_workflow_step():
             }), 400
         
         # Get requirement
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({
                 'success': False,
@@ -413,7 +436,7 @@ def get_workflow_state(request_id):
     """Get workflow state for a specific request"""
     try:
         # Validate request_id exists
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({
                 'success': False,
@@ -422,7 +445,7 @@ def get_workflow_state(request_id):
             }), 404
         
         # Get profiles linked to this requirement
-        profiles = Profile.query.filter(
+        profiles = get_db_session().query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.deleted_at.is_(None)
         ).all()
@@ -542,7 +565,7 @@ def save_workflow_state(request_id):
             }), 400
         
         # Validate request_id exists
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({
                 'success': False,
@@ -613,7 +636,7 @@ def save_workflow_state(request_id):
 def delete_workflow_progress(request_id):
     """Delete workflow progress for a specific request"""
     try:
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({
                 'success': False,
@@ -647,7 +670,7 @@ def delete_workflow_progress(request_id):
 def reset_workflow_progress(request_id):
     """Reset workflow progress for a specific request"""
     try:
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({
                 'success': False,

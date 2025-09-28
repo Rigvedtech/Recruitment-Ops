@@ -4,8 +4,49 @@ from typing import Dict, List, Optional, Any, Union
 from app.models.notification import Notification
 from app.models.user import User
 from app.database import db
-from flask import current_app
+from flask import current_app, g
 import pytz
+
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    try:
+        # Check if we have a domain-specific session
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            # Verify it's a valid session object
+            if hasattr(g.db_session, 'query'):
+                return g.db_session
+        
+        # Fallback to global session for backward compatibility
+        # Get the actual session from Flask-SQLAlchemy
+        try:
+            # This gets the actual SQLAlchemy session
+            session = db.session
+            if hasattr(session, 'query'):
+                return session
+            else:
+                current_app.logger.error("db.session does not have query method")
+                # Try to create a new session from the engine
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+        except Exception as session_error:
+            current_app.logger.error(f"Error accessing db.session: {str(session_error)}")
+            # Last resort: try to create session from engine
+            try:
+                from sqlalchemy.orm import sessionmaker
+                Session = sessionmaker(bind=db.engine)
+                return Session()
+            except Exception as engine_error:
+                current_app.logger.error(f"Error creating session from engine: {str(engine_error)}")
+                raise Exception("Cannot create database session")
+        
+    except Exception as e:
+        # If there's any error, log it and re-raise
+        current_app.logger.error(f"Critical error in get_db_session: {str(e)}")
+        raise e
 
 # IST timezone
 IST = pytz.timezone('Asia/Kolkata')
@@ -40,13 +81,13 @@ class NotificationService:
             # Validate user exists
             if isinstance(user_id, str) and len(user_id) == 36:
                 # user_id is already a UUID
-                user = User.query.filter_by(user_id=user_id).first()
+                user = get_db_session().query(User).filter_by(user_id=user_id).first()
             else:
                 # Try legacy integer lookup
                 try:
                     import uuid
                     # For backward compatibility, assume integer user_id corresponds to user index
-                    users = User.query.all()
+                    users = get_db_session().query(User).all()
                     if isinstance(user_id, int) and 1 <= user_id <= len(users):
                         user = users[user_id - 1]
                     else:
@@ -76,14 +117,14 @@ class NotificationService:
                 expires_at=expires_at
             )
             
-            db.session.add(notification)
-            db.session.commit()
+        get_db_session().add(notification)
+        get_db_session().commit()
             
             current_app.logger.info(f"Created notification {notification.id} for user {user_id}: {notification_type}")
             return notification
             
         except Exception as e:
-            db.session.rollback()
+            get_db_session().rollback()
             current_app.logger.error(f"Error creating notification: {str(e)}")
             return None
     
@@ -99,7 +140,7 @@ class NotificationService:
         """Create SLA breach notification for a recruiter"""
         try:
             # Find the recruiter user
-            user = User.query.filter_by(username=assigned_recruiter).first()
+            user = get_db_session().query(User).filter_by(username=assigned_recruiter).first()
             if not user:
                 current_app.logger.warning(f"Recruiter {assigned_recruiter} not found for SLA breach notification")
                 return None
@@ -131,8 +172,8 @@ class NotificationService:
                 expires_at=expires_at
             )
             
-            db.session.add(notification)
-            db.session.commit()
+        get_db_session().add(notification)
+        get_db_session().commit()
             
             current_app.logger.info(f"Created notification {notification.id} for user {user.username}: sla_breach")
             return notification
@@ -151,7 +192,7 @@ class NotificationService:
         """Create new requirement assignment notification for a recruiter"""
         try:
             # Find the recruiter user
-            user = User.query.filter_by(username=recruiter_username).first()
+            user = get_db_session().query(User).filter_by(username=recruiter_username).first()
             if not user:
                 current_app.logger.warning(f"Recruiter {recruiter_username} not found for assignment notification")
                 return None
@@ -181,8 +222,8 @@ class NotificationService:
                 expires_at=expires_at
             )
             
-            db.session.add(notification)
-            db.session.commit()
+        get_db_session().add(notification)
+        get_db_session().commit()
             
             current_app.logger.info(f"Created notification {notification.id} for user {user.username}: new_assignment")
             return notification
@@ -310,7 +351,7 @@ class NotificationService:
         try:
             # Convert legacy integer user_id to UUID if needed
             if isinstance(user_id, int):
-                users = User.query.all()
+                users = get_db_session().query(User).all()
                 if 1 <= user_id <= len(users):
                     actual_user_id = users[user_id - 1].id
                 else:
@@ -330,7 +371,7 @@ class NotificationService:
         try:
             # Convert legacy integer user_id to UUID if needed
             if isinstance(user_id, int):
-                users = User.query.all()
+                users = get_db_session().query(User).all()
                 if 1 <= user_id <= len(users):
                     actual_user_id = users[user_id - 1].id
                 else:
@@ -350,10 +391,10 @@ class NotificationService:
             # Get the user (handle both legacy integer and UUID user_id)
             from app.models.user import User
             if isinstance(user_id, str) and len(user_id) == 36:
-                user = User.query.filter_by(id=user_id).first()
+                user = get_db_session().query(User).filter_by(id=user_id).first()
             else:
                 # Legacy integer lookup
-                users = User.query.all()
+                users = get_db_session().query(User).all()
                 if isinstance(user_id, int) and 1 <= user_id <= len(users):
                     user = users[user_id - 1]
                 else:
@@ -361,10 +402,10 @@ class NotificationService:
             
             if user and user.role == 'admin':
                 # Admin can mark any notification as read
-                notification = Notification.query.filter_by(id=notification_id).first()
+                notification = get_db_session().query(Notification).filter_by(id=notification_id).first()
             else:
                 # Regular users can only mark their own notifications as read
-                notification = Notification.query.filter_by(
+                notification = get_db_session().query(Notification).filter_by(
                     id=notification_id,
                     user_id=user_id
                 ).first()
@@ -390,10 +431,10 @@ class NotificationService:
             # Get the user (handle both legacy integer and UUID user_id)
             from app.models.user import User
             if isinstance(user_id, str) and len(user_id) == 36:
-                user = User.query.filter_by(id=user_id).first()
+                user = get_db_session().query(User).filter_by(id=user_id).first()
             else:
                 # Legacy integer lookup
-                users = User.query.all()
+                users = get_db_session().query(User).all()
                 if isinstance(user_id, int) and 1 <= user_id <= len(users):
                     user = users[user_id - 1]
                 else:
@@ -401,7 +442,7 @@ class NotificationService:
             
             if user and user.role == 'admin':
                 # Admin marks ALL unread notifications as read (from all users)
-                all_unread_notifications = Notification.query.filter_by(is_read=False).all()
+                all_unread_notifications = get_db_session().query(Notification).filter_by(is_read=False).all()
                 count = 0
                 for notification in all_unread_notifications:
                     notification.is_read = True
@@ -430,7 +471,7 @@ class NotificationService:
         """Create notifications for all admin users"""
         notifications = []
         try:
-            admin_users = User.query.filter_by(role='admin').all()
+            admin_users = get_db_session().query(User).filter_by(role='admin').all()
             
             for admin in admin_users:
                 notification = NotificationService.create_notification(
