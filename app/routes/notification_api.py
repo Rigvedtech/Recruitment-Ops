@@ -1,9 +1,27 @@
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from app.services.notification_service import NotificationService
 from app.models.user import User
 from app.models.notification import Notification
 from app.database import db
+
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    try:
+        # Check if we have a domain-specific session
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            return g.db_session
+        
+        # Fallback to global session for backward compatibility
+        return db.session
+        
+    except Exception as e:
+        # If there's any error, fall back to global session
+        current_app.logger.error(f"Error in get_db_session: {str(e)}")
+        return db.session
 
 notification_bp = Blueprint('notifications', __name__, url_prefix='/api/notifications')
 
@@ -11,7 +29,7 @@ def get_user_by_legacy_id(user_id):
     """Helper function to get user by legacy integer ID (for UUID migration compatibility)"""
     try:
         # For backward compatibility, map integer user_id to actual users
-        users = User.query.all()
+        users = get_db_session().query(User).all()
         if 1 <= user_id <= len(users):
             return users[user_id - 1]  # Simple index-based lookup
     except:
@@ -28,7 +46,7 @@ def get_user_notifications():
             return jsonify({'error': 'user_id is required'}), 400
 
         # Validate user exists
-        user = User.query.filter_by(user_id=user_id).first()
+        user = get_db_session().query(User).filter_by(user_id=user_id).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
@@ -67,7 +85,7 @@ def get_unread_count():
             return jsonify({'error': 'user_id is required'}), 400
 
         # Validate user exists
-        user = User.query.filter_by(user_id=user_id).first()
+        user = get_db_session().query(User).filter_by(user_id=user_id).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
@@ -94,7 +112,7 @@ def mark_notification_read(notification_id):
             return jsonify({'error': 'user_id is required'}), 400
 
         # Validate user exists
-        user = User.query.filter_by(user_id=user_id).first()
+        user = get_db_session().query(User).filter_by(user_id=user_id).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
@@ -124,7 +142,7 @@ def mark_all_notifications_read():
             return jsonify({'error': 'user_id is required'}), 400
 
         # Validate user exists
-        user = User.query.filter_by(user_id=user_id).first()
+        user = get_db_session().query(User).filter_by(user_id=user_id).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
@@ -154,7 +172,7 @@ def cleanup_expired_notifications():
             return jsonify({'error': 'user_id is required'}), 400
 
         # Validate user exists and is admin
-        user = User.query.filter_by(user_id=user_id).first()
+        user = get_db_session().query(User).filter_by(user_id=user_id).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
@@ -232,7 +250,7 @@ def trigger_sla_notifications():
             return jsonify({'error': 'user_id is required'}), 400
 
         # Validate user exists and is admin
-        user = User.query.filter_by(user_id=user_id).first()
+        user = get_db_session().query(User).filter_by(user_id=user_id).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
@@ -263,7 +281,7 @@ def get_all_notifications_admin():
             return jsonify({'error': 'user_id is required'}), 400
 
         # Validate user exists and is admin (now works with UUID)
-        user = User.query.filter_by(user_id=user_id).first()
+        user = get_db_session().query(User).filter_by(user_id=user_id).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
 

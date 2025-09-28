@@ -13,10 +13,17 @@ def get_db_session():
     Get the correct database session for the current domain.
     Returns domain-specific session if available, otherwise falls back to global session.
     """
-    if hasattr(g, 'db_session') and g.db_session is not None:
-        return g.db_session
-    else:
+    try:
+        # Check if we have a domain-specific session
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            return g.db_session
+        
         # Fallback to global session for backward compatibility
+        return db.session
+        
+    except Exception as e:
+        # If there's any error, fall back to global session
+        current_app.logger.error(f"Error in get_db_session: {str(e)}")
         return db.session
 
 sla_bp = Blueprint('sla', __name__, url_prefix='/api/sla')
