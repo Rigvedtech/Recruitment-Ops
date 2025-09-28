@@ -208,7 +208,7 @@ def get_workflow_sla_status(requirement_id):
         # Check if requirement_id is actually a request_id (starts with 'Req')
         if requirement_id.startswith('Req'):
             # It's a request_id, so we need to get the actual requirement_id
-            requirement = Requirement.query.filter_by(request_id=requirement_id).first()
+            requirement = get_db_session().query(Requirement).filter_by(request_id=requirement_id).first()
             if not requirement:
                 return jsonify({'error': 'Requirement not found'}), 404
             actual_requirement_id = str(requirement.requirement_id)
@@ -229,10 +229,10 @@ def auto_start_workflow_steps(requirement_id):
         # Check if requirement_id is actually a request_id (starts with 'Req')
         if requirement_id.startswith('Req'):
             # It's a request_id, so query by request_id
-            requirement = Requirement.query.filter_by(request_id=requirement_id).first()
+            requirement = get_db_session().query(Requirement).filter_by(request_id=requirement_id).first()
         else:
             # It's a UUID requirement_id
-            requirement = Requirement.query.filter_by(requirement_id=requirement_id).first()
+            requirement = get_db_session().query(Requirement).filter_by(requirement_id=requirement_id).first()
         
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
@@ -259,7 +259,7 @@ def auto_start_workflow_steps_by_request(request_id):
     """Automatically start SLA tracking for workflow steps using request_id"""
     try:
         # Get the requirement by request_id
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return jsonify({'error': 'Requirement not found'}), 404
         
@@ -397,7 +397,7 @@ def get_breaching_requests():
         
         for step in breaching_steps:
             # Get requirement details
-            requirement = Requirement.query.filter_by(requirement_id=step.requirement_id).first()
+            requirement = get_db_session().query(Requirement).filter_by(requirement_id=step.requirement_id).first()
             
             # Calculate breach time in a clean format
             breach_hours = step.sla_breach_hours or 0

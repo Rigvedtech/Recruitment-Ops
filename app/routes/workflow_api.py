@@ -216,7 +216,7 @@ def update_workflow_step():
         # Get current user
         current_user = None
         if user_id:
-            current_user = User.query.filter_by(user_id=user_id).first()
+            current_user = get_db_session().query(User).filter_by(user_id=user_id).first()
         
         # Process each profile
         updated_profiles = []
@@ -227,14 +227,14 @@ def update_workflow_step():
             if len(str(profile_id)) == 36 and '-' in str(profile_id):
                 # Looks like UUID, try profile_id first
                 try:
-                    profile = Profile.query.filter_by(profile_id=profile_id).first()
+                    profile = get_db_session().query(Profile).filter_by(profile_id=profile_id).first()
                 except:
                     # If UUID query fails, fall back to student_id
                     pass
             
             if not profile:
                 # Try by student_id
-                profile = Profile.query.filter_by(student_id=profile_id).first()
+                profile = get_db_session().query(Profile).filter_by(student_id=profile_id).first()
             
             if not profile:
                 continue
@@ -583,14 +583,14 @@ def save_workflow_state(request_id):
                     username = parts[1].strip()
                     from app.models.user import User
                     # Try exact match first, then try with trailing space (for backward compatibility)
-                    current_user = User.query.filter_by(username=username).first()
+                    current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
                         # Try with trailing space (for data inconsistency)
-                        current_user = User.query.filter_by(username=f"{username} ").first()
+                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
                         # Try without trailing space if username has one
                         if username.endswith(' '):
-                            current_user = User.query.filter_by(username=username.rstrip()).first()
+                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
@@ -685,7 +685,7 @@ def reset_workflow_progress(request_id):
         Offer.query.filter_by(requirement_id=requirement.requirement_id).delete()
         
         # Reset profile statuses
-        profiles = Profile.query.filter_by(requirement_id=requirement.requirement_id).all()
+        profiles = get_db_session().query(Profile).filter_by(requirement_id=requirement.requirement_id).all()
         for profile in profiles:
             profile.status = None
         

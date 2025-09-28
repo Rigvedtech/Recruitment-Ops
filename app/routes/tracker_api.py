@@ -1472,7 +1472,7 @@ def fix_candidate_submissions():
     """Manually fix the status of requirements that have profiles but are still showing as 'Open'"""
     try:
         # Find all requirements that have profiles linked to them but are still marked as 'Open'
-        requirements_to_fix = Requirement.query.join(
+        requirements_to_fix = get_db_session().query(Requirement).join(
             Profile, Requirement.requirement_id == Profile.requirement_id
         ).filter(
             Requirement.status == 'Open'
@@ -1576,7 +1576,7 @@ def get_profiles_count():
         
         # Get automatic requirements (email-based) with existing filters
         from app.models.email_details import EmailDetails
-        automatic_query = Requirement.query.join(
+        automatic_query = get_db_session().query(Requirement).join(
             EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id
         ).filter(
             Requirement.requirement_id.isnot(None),
@@ -1818,7 +1818,7 @@ def create_profiles():
             for attempt in range(max_retries):
                 try:
                     # Get the highest existing student_id and increment
-                    last_profile = Profile.query.order_by(Profile.student_id.desc()).first()
+                    last_profile = get_db_session().query(Profile).order_by(Profile.student_id.desc()).first()
                     if last_profile and last_profile.student_id.startswith('STU'):
                         try:
                             last_number = int(last_profile.student_id[3:])

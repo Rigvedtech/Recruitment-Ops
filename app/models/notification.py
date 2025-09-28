@@ -3,6 +3,37 @@ from app.database import db, GUID, postgresql_uuid_default
 import uuid
 import pytz
 import enum
+from flask import g, current_app
+from sqlalchemy.orm import sessionmaker
+
+def get_db_session():
+    try:
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            if hasattr(g.db_session, 'query'):
+                return g.db_session
+        
+        session = db.session
+        if hasattr(session, 'query'):
+            return session
+        else:
+            current_app.logger.error("db.session does not have query method")
+            from sqlalchemy.orm import sessionmaker
+            Session = sessionmaker(bind=db.engine)
+            return Session()
+    except Exception as session_error:
+        current_app.logger.error(f"Error accessing db.session: {str(session_error)}")
+        try:
+            from sqlalchemy.orm import sessionmaker
+            Session = sessionmaker(bind=db.engine)
+            return Session()
+        except Exception as engine_error:
+            current_app.logger.error(f"Error creating session from engine: {str(engine_error)}")
+            raise Exception("Cannot create database session")
+    except Exception as e:
+        current_app.logger.error(f"Critical error in get_db_session: {str(e)}")
+        raise e
+
+
 
 # IST timezone
 IST = pytz.timezone('Asia/Kolkata')
@@ -95,7 +126,7 @@ class Notification(db.Model):
     @staticmethod
     def get_user_notifications(user_id, include_read=True, limit=50):
         """Get notifications for a specific user"""
-        query = Notification.query.filter_by(user_id=user_id)
+        query = get_db_session().query(Notification).filter_by(user_id=user_id)
         
         if not include_read:
             query = query.filter_by(is_read=False)
@@ -113,7 +144,7 @@ class Notification(db.Model):
     @staticmethod
     def get_unread_count(user_id):
         """Get count of unread notifications for a user"""
-        return Notification.query.filter_by(
+        return get_db_session().query(Notification).filter_by(
             user_id=user_id, 
             is_read=False
         ).filter(
@@ -126,7 +157,7 @@ class Notification(db.Model):
     @staticmethod
     def mark_all_as_read(user_id):
         """Mark all notifications as read for a user"""
-        notifications = Notification.query.filter_by(
+        notifications = get_db_session().query(Notification).filter_by(
             user_id=user_id,
             is_read=False
         ).all()
@@ -141,7 +172,7 @@ class Notification(db.Model):
     @staticmethod
     def cleanup_expired():
         """Clean up expired notifications"""
-        expired = Notification.query.filter(
+        expired = get_db_session().query(Notification).filter(
             Notification.expires_at < datetime.now(IST)
         ).all()
         
