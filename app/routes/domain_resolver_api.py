@@ -10,6 +10,17 @@ from app.services.connection_manager import set_db_session_for_domain, get_curre
 from app.database import db
 from urllib.parse import urlparse
 
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    if hasattr(g, 'db_session') and g.db_session is not None:
+        return g.db_session
+    else:
+        # Fallback to global session for backward compatibility
+        return db.session
+
 logger = logging.getLogger(__name__)
 
 domain_resolver_api_bp = Blueprint('domain_resolver_api', __name__, url_prefix='/api/domain')
@@ -56,7 +67,7 @@ def resolve_domain():
                 'connection_test': False
             }
             try:
-                test_result = db.session.execute("SELECT 1 as test").fetchone()
+                test_result = get_db_session().execute("SELECT 1 as test").fetchone()
                 db_info['connection_test'] = test_result is not None
             except Exception as e:
                 logger.error(f"Local SQLAlchemy connection test failed: {str(e)}")

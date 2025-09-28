@@ -60,7 +60,9 @@ def create_app(config_name='default'):
     # Setup domain-aware models for automatic domain-specific database routing
     try:
         from app.services.domain_aware_db import setup_domain_aware_models
-        setup_domain_aware_models()
+        # Ensure we run inside an application context
+        with app.app_context():
+            setup_domain_aware_models()
         print("Domain-aware database models configured successfully!")
     except Exception as e:
         print(f"Warning: Could not configure domain-aware models: {e}")

@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, g
 from app.models.requirement import Requirement, RequirementStatusEnum
 from app.models.profile import Profile
 from app.models.screening import Screening, ScreeningStatusEnum
@@ -12,10 +12,23 @@ from app.models.user import User
 from app.database import db
 from datetime import datetime
 import logging
+from app.middleware.domain_auth import require_domain_auth
+
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    if hasattr(g, 'db_session') and g.db_session is not None:
+        return g.db_session
+    else:
+        # Fallback to global session for backward compatibility
+        return db.session
 
 workflow_bp = Blueprint('workflow', __name__, url_prefix='/api')
 
 @workflow_bp.route('/workflow-progress/<request_id>', methods=['GET'])
+@require_domain_auth
 def get_workflow_progress(request_id):
     """Get workflow progress for a specific request"""
     try:
@@ -137,6 +150,7 @@ def get_workflow_progress(request_id):
         }), 500
 
 @workflow_bp.route('/workflow-step', methods=['POST'])
+@require_domain_auth
 def update_workflow_step():
     """Update workflow step for profiles"""
     try:
@@ -212,7 +226,7 @@ def update_workflow_step():
                             status_timestamp=datetime.utcnow(),
                             created_by=current_user.user_id if current_user else None
                         )
-                        db.session.add(screening)
+                        get_db_session().add(screening)
                     else:
                         screening.status = ScreeningStatusEnum(status)
                         screening.status_timestamp = datetime.utcnow()
@@ -233,7 +247,7 @@ def update_workflow_step():
                             status_timestamp=datetime.utcnow(),
                             created_by=current_user.user_id if current_user else None
                         )
-                        db.session.add(interview_scheduled)
+                        get_db_session().add(interview_scheduled)
                     else:
                         interview_scheduled.status = InterviewScheduledStatusEnum(status)
                         interview_scheduled.status_timestamp = datetime.utcnow()
@@ -254,7 +268,7 @@ def update_workflow_step():
                             status_timestamp=datetime.utcnow(),
                             created_by=current_user.user_id if current_user else None
                         )
-                        db.session.add(round1)
+                        get_db_session().add(round1)
                     else:
                         round1.status = InterviewRoundOneStatusEnum(status)
                         round1.status_timestamp = datetime.utcnow()
@@ -275,7 +289,7 @@ def update_workflow_step():
                             status_timestamp=datetime.utcnow(),
                             created_by=current_user.user_id if current_user else None
                         )
-                        db.session.add(round2)
+                        get_db_session().add(round2)
                     else:
                         round2.status = InterviewRoundTwoStatusEnum(status)
                         round2.status_timestamp = datetime.utcnow()
@@ -294,7 +308,7 @@ def update_workflow_step():
                             active=status == 'offered',
                             created_by=current_user.user_id if current_user else None
                         )
-                        db.session.add(offer)
+                        get_db_session().add(offer)
                     else:
                         offer.active = status == 'offered'
                         offer.updated_by = current_user.user_id if current_user else None
@@ -313,7 +327,7 @@ def update_workflow_step():
                             status=OnboardingStatusEnum(status),
                             created_by=current_user.user_id if current_user else None
                         )
-                        db.session.add(onboarding)
+                        get_db_session().add(onboarding)
                     else:
                         onboarding.status = OnboardingStatusEnum(status)
                         onboarding.updated_by = current_user.user_id if current_user else None
@@ -342,7 +356,7 @@ def update_workflow_step():
             except Exception as e:
                 current_app.logger.error(f"Error auto-updating requirement status: {str(e)}")
         
-        db.session.commit()
+        get_db_session().commit()
         
         return jsonify({
             'success': True,
@@ -351,7 +365,7 @@ def update_workflow_step():
         })
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f'Error updating workflow step: {str(e)}')
         return jsonify({
             'success': False,
@@ -360,6 +374,7 @@ def update_workflow_step():
         }), 500
 
 @workflow_bp.route('/workflow-progress/<request_id>', methods=['POST'])
+@require_domain_auth
 def save_workflow_progress(request_id):
     """Save workflow progress for a specific request (legacy compatibility)"""
     try:
@@ -571,7 +586,7 @@ def save_workflow_state(request_id):
         
         # Save the state data (this is mainly for frontend state management)
         # The actual workflow updates should go through the /workflow-step endpoint
-        db.session.commit()
+        get_db_session().commit()
         
         return jsonify({
             'success': True,
@@ -579,7 +594,7 @@ def save_workflow_state(request_id):
         })
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f'Error saving workflow state for {request_id}: {str(e)}')
         return jsonify({
             'success': False,
@@ -605,7 +620,7 @@ def delete_workflow_progress(request_id):
         InterviewRoundTwo.query.filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
         Offer.query.filter_by(requirement_id=requirement.requirement_id).update({'is_deleted': True})
         
-        db.session.commit()
+        get_db_session().commit()
         
         return jsonify({
             'success': True,
@@ -613,7 +628,7 @@ def delete_workflow_progress(request_id):
         })
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f'Error deleting workflow progress for {request_id}: {str(e)}')
         return jsonify({
             'success': False,
@@ -644,7 +659,7 @@ def reset_workflow_progress(request_id):
         for profile in profiles:
             profile.status = None
         
-        db.session.commit()
+        get_db_session().commit()
         
         return jsonify({
             'success': True,
@@ -657,7 +672,7 @@ def reset_workflow_progress(request_id):
         })
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f'Error resetting workflow progress for {request_id}: {str(e)}')
         return jsonify({
             'success': False,

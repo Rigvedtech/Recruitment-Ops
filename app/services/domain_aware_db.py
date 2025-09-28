@@ -127,8 +127,7 @@ def setup_domain_aware_models():
         for model in models:
             try:
                 # Override the query property with a domain-aware version
-                original_query = model.query
-                
+                # IMPORTANT: Do NOT access model.query here (no app context yet)
                 def create_domain_aware_query_property(model_class):
                     @property
                     def domain_aware_query(cls):
@@ -141,8 +140,8 @@ def setup_domain_aware_models():
                             return db.session.query(model_class)
                     return domain_aware_query
                 
-                # Replace the query property
-                type(model).query = create_domain_aware_query_property(model)
+                # Replace the query property on the model class
+                setattr(model, 'query', create_domain_aware_query_property(model))
                 
                 # Add the session getter method
                 def get_session(cls):

@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, send_from_directory, current_app, render_template
+from flask import Blueprint, jsonify, request, send_from_directory, current_app, render_template, g
 from app.services.email_processor import EmailProcessor
 from app.services.export_handler import ExportHandler
 from app.services.recruiter_notification_service import RecruiterNotificationService
@@ -21,6 +21,17 @@ from sqlalchemy import func, and_, or_
 import re
 import logging
 import json
+
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    if hasattr(g, 'db_session') and g.db_session is not None:
+        return g.db_session
+    else:
+        # Fallback to global session for backward compatibility
+        return db.session
 
 def format_enum_for_display(value):
     """Convert database enum values to user-friendly display format"""
@@ -73,6 +84,7 @@ def test_token():
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/emails/all', methods=['GET'])
+@require_domain_auth
 def get_all_emails():
     """Get all processed emails"""
     try:
@@ -178,6 +190,7 @@ def get_all_emails():
         }), 500
 
 @api_bp.route('/emails/recruiter', methods=['GET'])
+@require_domain_auth
 def get_recruiter_emails():
     """Get recruiter emails"""
     try:
@@ -523,6 +536,7 @@ def process_emails():
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/profiles/requirement/<string:request_id>', methods=['GET'])
+@require_domain_auth
 def get_profiles_for_requirement(request_id):
     """Get all profiles for a specific requirement by request_id"""
     try:
@@ -564,6 +578,7 @@ def get_requirement_by_id(request_id):
         return jsonify({'error': 'Failed to fetch requirement'}), 500
 
 @api_bp.route('/profiles', methods=['GET'])
+@require_domain_auth
 def get_profiles():
     """Get all candidate profiles with optional search and filtering"""
     try:
@@ -667,7 +682,7 @@ def delete_profile(student_id):
 
         # Perform soft delete by setting deleted_at timestamp
         profile.deleted_at = datetime.utcnow()
-        db.session.commit()
+        get_db_session().commit()
 
         current_app.logger.info(f"Profile {student_id} soft deleted successfully")
         return jsonify({
@@ -677,7 +692,7 @@ def delete_profile(student_id):
 
     except Exception as e:
         current_app.logger.error(f"Error deleting profile {student_id}: {str(e)}")
-        db.session.rollback()
+        get_db_session().rollback()
         return jsonify({
             'success': False,
             'message': f'Failed to delete profile: {str(e)}'
@@ -737,6 +752,7 @@ def export_data():
         }), 500
 
 @api_bp.route('/requirements', methods=['GET'])
+@require_domain_auth
 def get_requirements():
     """Get all job requirements (excluding reply/forward emails)"""
     try:
@@ -964,8 +980,8 @@ def create_requirement():
             job_file_name=data.get('job_file_name')
         )
         
-        db.session.add(new_requirement)
-        db.session.commit()
+        get_db_session().add(new_requirement)
+        get_db_session().commit()
         
         current_app.logger.info(f"Created new manual requirement: {new_requirement.requirement_id} with is_manual_requirement={new_requirement.is_manual_requirement}")
         return jsonify({
@@ -975,7 +991,7 @@ def create_requirement():
         }), 201
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error creating requirement: {str(e)}")
         return jsonify({'error': 'Failed to create requirement'}), 500
 
@@ -1012,8 +1028,8 @@ def force_create_requirement():
             job_file_name=data.get('job_file_name')
         )
         
-        db.session.add(new_requirement)
-        db.session.commit()
+        get_db_session().add(new_requirement)
+        get_db_session().commit()
         
         current_app.logger.info(f"Force created new manual requirement: {new_requirement.requirement_id} with is_manual_requirement={new_requirement.is_manual_requirement}")
         return jsonify({
@@ -1023,7 +1039,7 @@ def force_create_requirement():
         }), 201
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error force creating requirement: {str(e)}")
         return jsonify({'error': 'Failed to create requirement'}), 500
 
@@ -1279,8 +1295,8 @@ def bulk_upload_requirements():
                 else:
                     # Create requirement
                     new_requirement = Requirement(**requirement_data)
-                    db.session.add(new_requirement)
-                    db.session.commit()
+                    get_db_session().add(new_requirement)
+                    get_db_session().commit()
                     
                     results.append({
                         'row': index + 1,
@@ -1291,7 +1307,7 @@ def bulk_upload_requirements():
                     success_count += 1
                 
             except Exception as e:
-                db.session.rollback()
+                get_db_session().rollback()
                 current_app.logger.error(f"Error processing row {index + 1}: {str(e)}")
                 results.append({
                     'row': index + 1,
@@ -1489,7 +1505,7 @@ def update_requirement_jd():
         requirement.job_file_name = original_filename
         requirement.updated_at = datetime.utcnow()
 
-        db.session.commit()
+        get_db_session().commit()
 
         current_app.logger.info(f"Updated JD for requirement {requirement_id}: {original_filename}")
 
@@ -1507,7 +1523,7 @@ def update_requirement_jd():
         }), 200
 
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error updating job description: {str(e)}")
         return jsonify({'success': False, 'error': f'Failed to update job description: {str(e)}'}), 500
 
@@ -1896,8 +1912,8 @@ def send_otp():
         )
         temp_user.set_password("temp_password")
         
-        db.session.add(temp_user)
-        db.session.commit()
+        get_db_session().add(temp_user)
+        get_db_session().commit()
         
         # Send OTP via email
         try:
@@ -1925,8 +1941,8 @@ def send_otp():
                 }), 200
             else:
                 # If email sending fails, clean up the temp user
-                db.session.delete(temp_user)
-                db.session.commit()
+                get_db_session().delete(temp_user)
+                get_db_session().commit()
                 return jsonify({
                     'status': 'error',
                     'message': 'Failed to send OTP email'
@@ -1934,8 +1950,8 @@ def send_otp():
                 
         except Exception as e:
             # If email sending fails, clean up the temp user
-            db.session.delete(temp_user)
-            db.session.commit()
+            get_db_session().delete(temp_user)
+            get_db_session().commit()
             current_app.logger.error(f"Error sending OTP email: {str(e)}")
             return jsonify({
                 'status': 'error',
@@ -1944,7 +1960,7 @@ def send_otp():
         
     except Exception as e:
         current_app.logger.error(f"Error in send_otp: {str(e)}")
-        db.session.rollback()
+        get_db_session().rollback()
         return jsonify({
             'status': 'error',
             'message': 'Failed to send OTP'
@@ -1976,8 +1992,8 @@ def verify_otp():
         # Check if OTP has expired
         from datetime import datetime
         if temp_user.otp_expiry_time and temp_user.otp_expiry_time < datetime.utcnow():
-            db.session.delete(temp_user)
-            db.session.commit()
+            get_db_session().delete(temp_user)
+            get_db_session().commit()
             return jsonify({
                 'status': 'error',
                 'message': 'OTP has expired'
@@ -1993,13 +2009,14 @@ def verify_otp():
         
     except Exception as e:
         current_app.logger.error(f"Error in verify_otp: {str(e)}")
-        db.session.rollback()
+        get_db_session().rollback()
         return jsonify({
             'status': 'error',
             'message': 'Failed to verify OTP'
         }), 500
 
 @api_bp.route('/users', methods=['GET'])
+@require_domain_auth
 def get_users():
     """Get all users (admin only)"""
     try:
@@ -2040,14 +2057,14 @@ def delete_user(user_id):
             if admin_count <= 1:
                 return jsonify({'success': False, 'message': 'Cannot delete the last admin user'}), 400
         
-        db.session.delete(user)
-        db.session.commit()
+        get_db_session().delete(user)
+        get_db_session().commit()
         
         current_app.logger.info(f"Deleted user: {user.username}")
         return jsonify({'success': True, 'message': f'User {user.username} deleted successfully'})
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error deleting user: {str(e)}")
         return jsonify({'success': False, 'message': f'Failed to delete user: {str(e)}'}), 500
 
@@ -2250,7 +2267,7 @@ def update_profile(student_id):
         profile.updated_at = datetime.utcnow()
         
         # Save to database
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Profile updated successfully: {student_id}")
         
@@ -2262,7 +2279,7 @@ def update_profile(student_id):
         
     except Exception as e:
         current_app.logger.error(f"Error updating profile {student_id}: {str(e)}")
-        db.session.rollback()
+        get_db_session().rollback()
         return jsonify({'error': f'Failed to update profile: {str(e)}'}), 500
 
 @api_bp.route('/profiles/<string:student_id>/resume', methods=['POST'])
@@ -2324,7 +2341,7 @@ def upload_resume(student_id):
         profile.updated_at = datetime.utcnow()
         
         # Save to database
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Resume uploaded successfully for profile: {student_id}")
         
@@ -2337,7 +2354,7 @@ def upload_resume(student_id):
         
     except Exception as e:
         current_app.logger.error(f"Error uploading resume for profile {student_id}: {str(e)}")
-        db.session.rollback()
+        get_db_session().rollback()
         return jsonify({'error': f'Failed to upload resume: {str(e)}'}), 500
 
 @api_bp.route('/profiles/<string:student_id>/resume', methods=['GET'])
@@ -3066,7 +3083,7 @@ def get_enum_values():
             ORDER BY enumlabel
         """)
         
-        result = db.session.execute(query, {'enum_type': db_enum_type}).fetchall()
+        result = get_db_session().execute(query, {'enum_type': db_enum_type}).fetchall()
         
         enum_values = [row[0] for row in result]
         
@@ -3128,7 +3145,7 @@ def add_enum_value():
             ) AND enumlabel = :enum_value
         """)
         
-        result = db.session.execute(check_query, {
+        result = get_db_session().execute(check_query, {
             'enum_type': db_enum_type,
             'enum_value': sanitized_value
         }).fetchone()
@@ -3140,8 +3157,8 @@ def add_enum_value():
         alter_query = text(f"ALTER TYPE {db_enum_type} ADD VALUE :enum_value")
         
         try:
-            db.session.execute(alter_query, {'enum_value': sanitized_value})
-            db.session.commit()
+            get_db_session().execute(alter_query, {'enum_value': sanitized_value})
+            get_db_session().commit()
             
             return jsonify({
                 'success': True,
@@ -3151,7 +3168,7 @@ def add_enum_value():
             })
             
         except Exception as db_error:
-            db.session.rollback()
+            get_db_session().rollback()
             current_app.logger.error(f"Database error adding enum value: {str(db_error)}")
             return jsonify({
                 'error': f'Database error: {str(db_error)}'
@@ -3190,7 +3207,7 @@ def get_recruiter_activity():
             date_str = current_date.strftime('%Y-%m-%d')
             
             # Get profiles submitted on this date
-            profiles_submitted = db.session.query(
+            profiles_submitted = get_db_session().query(
                 Profile.profile_id,
                 Profile.candidate_name,
                 Profile.created_at
@@ -3199,7 +3216,7 @@ def get_recruiter_activity():
             ).all()
             
             # Get all requirements and their assigned recruiters
-            all_requirements = db.session.query(
+            all_requirements = get_db_session().query(
                 Requirement.requirement_id,
                 Requirement.user_id
             ).all()
@@ -3303,7 +3320,7 @@ def get_recruiter_activity():
         ORDER BY r.company_name, onboarded_profiles DESC
         """
         
-        company_performance_result = db.session.execute(company_performance_query)
+        company_performance_result = get_db_session().execute(company_performance_query)
         
         # Group by company
         company_data = {}
@@ -3348,6 +3365,7 @@ def get_recruiter_activity():
 
 
 @api_bp.route('/requirements-activity', methods=['GET'])
+@require_domain_auth
 def get_requirements_activity():
     """Get requirements activity data"""
     try:
@@ -3362,7 +3380,7 @@ def get_requirements_activity():
         
         # Get today's active requirements (requirements that recruiters worked on today)
         # This includes requirements where profiles were submitted today
-        today_active_requirements = db.session.query(
+        today_active_requirements = get_db_session().query(
             Requirement.requirement_id
         ).join(
             Profile, Requirement.requirement_id == Profile.requirement_id
@@ -3371,7 +3389,7 @@ def get_requirements_activity():
         ).distinct().count()
         
         # Get this week's active requirements (requirements that recruiters worked on this week)
-        weekly_active_requirements = db.session.query(
+        weekly_active_requirements = get_db_session().query(
             Requirement.requirement_id
         ).join(
             Profile, Requirement.requirement_id == Profile.requirement_id
@@ -3607,6 +3625,51 @@ def run_job_manually_endpoint(job_id):
         return jsonify({
             'success': False,
             'error': f'Failed to run job manually: {str(e)}'
+        }), 500
+
+@api_bp.route('/test-domain-isolation', methods=['GET'])
+def test_domain_isolation():
+    """Test endpoint to verify domain isolation is working"""
+    try:
+        # Get domain from headers
+        domain = request.headers.get('X-Original-Domain') or request.headers.get('X-Domain')
+        
+        # Get database session info
+        session = get_db_session()
+        session_id = id(session)
+        
+        # Get some basic counts from the database
+        user_count = session.query(User).count()
+        profile_count = session.query(Profile).count()
+        requirement_count = session.query(Requirement).count()
+        
+        # Get database connection info if available
+        db_info = {}
+        try:
+            if hasattr(session, 'bind') and hasattr(session.bind, 'url'):
+                db_info['database_url'] = str(session.bind.url)
+        except:
+            pass
+        
+        return jsonify({
+            'success': True,
+            'domain': domain,
+            'session_id': session_id,
+            'database_counts': {
+                'users': user_count,
+                'profiles': profile_count,
+                'requirements': requirement_count
+            },
+            'database_info': db_info,
+            'is_domain_session': hasattr(g, 'db_session') and g.db_session is not None,
+            'message': 'Domain isolation test completed'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': 'Domain isolation test failed'
         }), 500
 
 

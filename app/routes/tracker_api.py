@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, g
 from app.models.requirement import Requirement
 from app.models.profile import Profile
 # Legacy Tracker model - deprecated, use Profile.requirement_id relationship instead
@@ -10,6 +10,18 @@ from datetime import datetime
 import re
 from sqlalchemy import func
 from app.services.email_processor import EmailProcessor
+from app.middleware.domain_auth import require_domain_auth
+
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    if hasattr(g, 'db_session') and g.db_session is not None:
+        return g.db_session
+    else:
+        # Fallback to global session for backward compatibility
+        return db.session
 
 def format_enum_for_display(value):
     """Convert database enum values to user-friendly display format"""
@@ -256,6 +268,7 @@ def _categorize_content(email_subject, email_body):
     return None
 
 @tracker_bp.route('', methods=['GET'])
+@require_domain_auth
 def get_tracker_requirements():
     """Get all RFH requirements with request IDs for the tracker, grouped by thread_id or normalized subject for status."""
     try:
@@ -561,14 +574,15 @@ def get_tracker_requirements():
         
         result.sort(key=get_priority_sort_key)
         
-        db.session.commit()
+        get_db_session().commit()
         return jsonify(result)
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error in get_tracker_requirements: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @tracker_bp.route('/<string:request_id>', methods=['GET'])
+@require_domain_auth
 def get_tracker_requirement(request_id):
     """Get a specific tracker requirement by request_id"""
     try:
@@ -582,6 +596,7 @@ def get_tracker_requirement(request_id):
         return jsonify({'error': 'Failed to fetch requirement'}), 500
 
 @tracker_bp.route('/<string:request_id>/profiles', methods=['GET'])
+@require_domain_auth
 def get_profiles_for_request(request_id):
     """Get all profiles associated with a specific request_id"""
     try:
@@ -765,13 +780,13 @@ def update_tracker_requirement(request_id):
         except Exception as e:
             current_app.logger.error(f"Error auto-starting SLA tracking for {request_id}: {str(e)}")
         
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Updated requirement {request_id}: {data}")
         return jsonify(requirement.to_dict())
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error updating requirement: {str(e)}")
         return jsonify({'error': 'Failed to update requirement'}), 500
 
@@ -813,7 +828,7 @@ def delete_tracker_requirement(request_id):
         
         # Perform soft delete
         requirement.soft_delete(deleted_by_user=current_user.user_id)
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Successfully archived requirement {request_id} by {current_user.username}")
         return jsonify({
@@ -823,7 +838,7 @@ def delete_tracker_requirement(request_id):
         })
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error archiving requirement {request_id}: {str(e)}")
         return jsonify({'error': f'Failed to archive requirement: {str(e)}'}), 500
 
@@ -865,7 +880,7 @@ def restore_tracker_requirement(request_id):
         
         # Restore the requirement
         requirement.restore()
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Successfully restored requirement {request_id} by {current_user.username}")
         return jsonify({
@@ -875,7 +890,7 @@ def restore_tracker_requirement(request_id):
         })
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error restoring requirement {request_id}: {str(e)}")
         return jsonify({'error': f'Failed to restore requirement: {str(e)}'}), 500
 
@@ -1188,7 +1203,7 @@ def get_tracker_relationship_stats():
         ).count()
         
         # Count unique requirements that have profiles
-        unique_requirements = db.session.query(Profile.requirement_id).filter(
+        unique_requirements = get_db_session().query(Profile.requirement_id).filter(
             Profile.requirement_id.isnot(None),
             Profile.deleted_at.is_(None)
         ).distinct().count()
@@ -1200,7 +1215,7 @@ def get_tracker_relationship_stats():
         
         # Get top requirements by profile count
         top_requirements = []
-        requirement_counts = db.session.query(
+        requirement_counts = get_db_session().query(
             Profile.requirement_id,
             func.count(Profile.profile_id).label('profile_count')
         ).filter(
@@ -1438,7 +1453,7 @@ def fix_candidate_submissions():
             fixed_count += 1
             current_app.logger.info(f"Fixed requirement {req.requirement_id} status from '{old_status}' to 'Candidate_Submission'")
         
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Fixed {fixed_count} requirements to 'Candidate_Submission' status")
         return jsonify({
@@ -1447,7 +1462,7 @@ def fix_candidate_submissions():
         })
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error fixing candidate submissions: {str(e)}")
         return jsonify({'error': 'Failed to fix candidate submissions'}), 500 
 
@@ -1663,13 +1678,13 @@ def update_onboarding_status():
             # This requires implementing the onboarding status update logic
             updated_count += 1
         
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Updated onboarding status for {updated_count} profiles")
         return jsonify({'success': True, 'message': f'Onboarding status updated for {updated_count} profiles'})
     except Exception as e:
         current_app.logger.error(f"Error updating onboarding status: {str(e)}")
-        db.session.rollback()
+        get_db_session().rollback()
         return jsonify({'success': False, 'message': 'Failed to update onboarding status'}), 500
 
 @tracker_bp.route('/<string:request_id>/close', methods=['POST'])
@@ -1683,13 +1698,13 @@ def close_requirement(request_id):
         
         # Close the requirement
         requirement.close_requirement()
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Closed requirement {request_id}")
         return jsonify({'success': True, 'message': 'Requirement closed successfully'})
     except Exception as e:
         current_app.logger.error(f"Error closing requirement {request_id}: {str(e)}")
-        db.session.rollback()
+        get_db_session().rollback()
         return jsonify({'success': False, 'message': 'Failed to close requirement'}), 500
 
 @tracker_bp.route('/closed', methods=['GET'])
@@ -1886,7 +1901,7 @@ def create_profiles():
                         profile.source = None
                 
                 # Add to session but don't commit yet
-                db.session.add(profile)
+                get_db_session().add(profile)
                 created_profiles.append(profile)
                 student_ids.append(student_id)
                 
@@ -1923,7 +1938,7 @@ def create_profiles():
             requirement.updated_at = datetime.utcnow()
         
         # Commit all changes at once
-        db.session.commit()
+        get_db_session().commit()
         
         current_app.logger.info(f"Created {len(created_profiles)} profiles for request {request_id}, skipped {skipped_duplicates} duplicates")
         current_app.logger.info(f"Response will be: success={len(created_profiles) > 0}, has_duplicates={skipped_duplicates > 0}, all_duplicates={skipped_duplicates > 0 and len(created_profiles) == 0}")
@@ -1966,7 +1981,7 @@ def create_profiles():
             })
         
     except Exception as e:
-        db.session.rollback()
+        get_db_session().rollback()
         current_app.logger.error(f"Error creating profiles: {str(e)}")
         return jsonify({'success': False, 'message': f'Failed to create profiles: {str(e)}'}), 500
 
@@ -2063,7 +2078,7 @@ def move_profile():
         profile.requirement_id = target_requirement.requirement_id
         profile.updated_at = datetime.utcnow()
         
-        db.session.commit()
+        get_db_session().commit()
         
         result = {
             'success': True,

@@ -8,6 +8,18 @@ from app.services.domain_aware_db import debug_session_info, is_using_domain_ses
 from app.models.user import User
 from app.models.profile import Profile
 from app.models.requirement import Requirement
+from app.database import db
+
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    if hasattr(g, 'db_session') and g.db_session is not None:
+        return g.db_session
+    else:
+        # Fallback to global session for backward compatibility
+        return db.session
 
 logger = logging.getLogger(__name__)
 
@@ -140,9 +152,9 @@ def compare_sessions():
         
         # Get counts using explicit default session
         results['default_session'] = {
-            'users': db.session.query(User).count(),
-            'profiles': db.session.query(Profile).count(),
-            'requirements': db.session.query(Requirement).count(),
+            'users': get_db_session().query(User).count(),
+            'profiles': get_db_session().query(Profile).count(),
+            'requirements': get_db_session().query(Requirement).count(),
             'session_type': 'default'
         }
         

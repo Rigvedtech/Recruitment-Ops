@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, g
 from app.services.sla_service import SLAService
 from app.models.sla_config import SLAConfig, StepNameEnum
 from app.models.sla_tracker import SLATracker
@@ -6,11 +6,24 @@ from app.models.requirement import Requirement
 from app.database import db
 from datetime import datetime, timedelta
 import traceback
+from app.middleware.domain_auth import require_domain_auth
+
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    if hasattr(g, 'db_session') and g.db_session is not None:
+        return g.db_session
+    else:
+        # Fallback to global session for backward compatibility
+        return db.session
 
 sla_bp = Blueprint('sla', __name__, url_prefix='/api/sla')
 
 # SLA Configuration Endpoints
 @sla_bp.route('/config', methods=['GET'])
+@require_domain_auth
 def get_sla_configs():
     """Get all SLA configurations"""
     try:
@@ -281,7 +294,7 @@ def get_all_recruiter_metrics():
         days = request.args.get('days', default=30, type=int)
         
         # Get all unique users from SLA tracker
-        users = db.session.query(SLATracker.user_id).distinct().all()
+        users = get_db_session().query(SLATracker.user_id).distinct().all()
         recruiter_metrics = []
         
         for (user_id,) in users:
@@ -470,8 +483,8 @@ def get_sla_trends():
         current_date = start_date
         
         # Get the actual date range of our SLA data
-        earliest_sla_date = db.session.query(db.func.min(SLATracker.step_started_at)).scalar()
-        latest_sla_date = db.session.query(db.func.max(SLATracker.step_started_at)).scalar()
+        earliest_sla_date = get_db_session().query(db.func.min(SLATracker.step_started_at)).scalar()
+        latest_sla_date = get_db_session().query(db.func.max(SLATracker.step_started_at)).scalar()
         
         if earliest_sla_date and latest_sla_date:
             # Use the actual SLA data range instead of the requested range
@@ -487,7 +500,7 @@ def get_sla_trends():
             next_date = current_date + timedelta(days=1)
             
             # Get all steps that were active on this day (started before next_date and not completed before current_date)
-            daily_steps = db.session.query(SLATracker).filter(
+            daily_steps = get_db_session().query(SLATracker).filter(
                 SLATracker.step_started_at < next_date,
                 (SLATracker.step_completed_at.is_(None) | (SLATracker.step_completed_at >= current_date))
             ).all()
