@@ -37,7 +37,7 @@ interface UserNotificationGroup {
 }
 
 interface NotificationBellProps {
-  user: User;
+  user: User | null;
 }
 
 const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
@@ -47,6 +47,11 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Don't render anything if user is not available
+  if (!user) {
+    return null;
+  }
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -64,7 +69,9 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
 
   // Get API base URL
   const getApiBaseUrl = () => {
-    return process.env.NEXT_PUBLIC_API_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976';
+    // Ensure the base URL includes /api prefix if not already present
+    return baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
   };
 
   // Fetch notifications

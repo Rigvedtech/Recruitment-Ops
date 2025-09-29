@@ -1,12 +1,24 @@
 from typing import Optional, Dict, Any
-from flask import current_app
+from flask import current_app, g
 from app.models.user import User
 from app.services.email_processor import EmailProcessor
+from app.database import db
 from datetime import datetime
 
 
 class EmailNotificationService:
     """Service to handle email notifications for various events"""
+    
+    @staticmethod
+    def get_db_session():
+        """Get the correct database session for the current domain"""
+        try:
+            if hasattr(g, 'db_session') and g.db_session is not None:
+                if hasattr(g.db_session, 'query'):
+                    return g.db_session
+            return db.session
+        except Exception:
+            return db.session
     
     @staticmethod
     def send_new_assignment_email(
@@ -19,7 +31,8 @@ class EmailNotificationService:
         """Send email notification for new assignment"""
         try:
             # Find the recruiter user
-            user = User.query.filter_by(username=recruiter_username).first()
+            session = EmailNotificationService.get_db_session()
+            user = session.query(User).filter_by(username=recruiter_username).first()
             if not user:
                 current_app.logger.warning(f"Recruiter {recruiter_username} not found for email notification")
                 return False

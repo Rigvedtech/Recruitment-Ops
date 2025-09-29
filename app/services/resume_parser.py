@@ -8,8 +8,16 @@ from spacy.matcher import Matcher
 
 class ResumeParser:
     def __init__(self):
-        # Load English language model
-        self.nlp = spacy.load("en_core_web_sm")
+        # Load English language model with fallback
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            # Fallback to basic English model if en_core_web_sm is not available
+            try:
+                self.nlp = spacy.load("en")
+            except OSError:
+                # If no spaCy models are available, create a basic nlp object
+                self.nlp = spacy.blank("en")
         
         # Initialize matcher with patterns
         self.matcher = Matcher(self.nlp.vocab)

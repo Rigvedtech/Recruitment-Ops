@@ -29,7 +29,7 @@ export const useDomainResolver = () => {
           if (domainHost.includes('rgvdit-rops') || domainHost.includes('finquest-rops')) {
             return 'http://20.188.122.171:1976';
           }
-          return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1976';
+          return process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976';
         };
 
         const API_BASE_URL = getApiBaseUrl();

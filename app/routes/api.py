@@ -1481,8 +1481,14 @@ def update_requirement_jd():
         if file_size > 10 * 1024 * 1024:  # 10MB
             return jsonify({'success': False, 'error': 'File size too large. Maximum size is 10MB'}), 400
 
-        # Find the requirement
-        requirement = get_db_session().query(Requirement).filter_by(requirement_id=requirement_id).first()
+        # Find the requirement - handle both request_id and requirement_id
+        if requirement_id.startswith('Req'):
+            # It's a request_id, so query by request_id
+            requirement = get_db_session().query(Requirement).filter_by(request_id=requirement_id).first()
+        else:
+            # It's a UUID requirement_id
+            requirement = get_db_session().query(Requirement).filter_by(requirement_id=requirement_id).first()
+        
         if not requirement:
             return jsonify({'success': False, 'error': 'Requirement not found'}), 404
 
@@ -1537,7 +1543,7 @@ def update_requirement_jd():
 
         get_db_session().commit()
 
-        current_app.logger.info(f"Updated JD for requirement {requirement_id}: {original_filename}")
+        current_app.logger.info(f"Updated JD for requirement {requirement.request_id} (ID: {requirement.requirement_id}): {original_filename}")
 
         return jsonify({
             'success': True,

@@ -43,6 +43,7 @@ class NotificationTypeEnum(enum.Enum):
     warning = "warning"
     error = "error"
     success = "success"
+    new_assignment = "new_assignment"
 
 class Notification(db.Model):
     __tablename__ = 'notifications'

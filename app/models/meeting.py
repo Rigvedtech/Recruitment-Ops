@@ -68,14 +68,27 @@ class Meeting(db.Model):
         """Get all meetings for a request, grouped by candidate"""
         from app.models.profile import Profile
         from app.models.requirement import Requirement
+        from flask import g
+        
+        # Get the correct database session
+        def get_db_session():
+            try:
+                if hasattr(g, 'db_session') and g.db_session is not None:
+                    if hasattr(g.db_session, 'query'):
+                        return g.db_session
+                return db.session
+            except Exception:
+                return db.session
+        
+        session = get_db_session()
         
         # Get requirement
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = session.query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return {}
         
         # Build query
-        query = cls.query.join(Profile).filter(
+        query = session.query(cls).join(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             cls.is_deleted == False
         )
@@ -106,14 +119,27 @@ class Meeting(db.Model):
         """Get meeting for a specific candidate"""
         from app.models.profile import Profile
         from app.models.requirement import Requirement
+        from flask import g
+        
+        # Get the correct database session
+        def get_db_session():
+            try:
+                if hasattr(g, 'db_session') and g.db_session is not None:
+                    if hasattr(g.db_session, 'query'):
+                        return g.db_session
+                return db.session
+            except Exception:
+                return db.session
+        
+        session = get_db_session()
         
         # Get requirement
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = session.query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return None
         
         # Build query
-        query = cls.query.join(Profile).filter(
+        query = session.query(cls).join(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.student_id == candidate_id,
             cls.is_deleted == False
@@ -142,13 +168,26 @@ class Meeting(db.Model):
         """Create or update a meeting"""
         from app.models.profile import Profile
         from app.models.requirement import Requirement
+        from flask import g
+        
+        # Get the correct database session
+        def get_db_session():
+            try:
+                if hasattr(g, 'db_session') and g.db_session is not None:
+                    if hasattr(g.db_session, 'query'):
+                        return g.db_session
+                return db.session
+            except Exception:
+                return db.session
+        
+        session = get_db_session()
         
         # Get requirement and profile
-        requirement = Requirement.query.filter_by(request_id=request_id).first()
+        requirement = session.query(Requirement).filter_by(request_id=request_id).first()
         if not requirement:
             return None
             
-        profile = Profile.query.filter(
+        profile = session.query(Profile).filter(
             Profile.requirement_id == requirement.requirement_id,
             Profile.student_id == candidate_id
         ).first()
@@ -157,7 +196,7 @@ class Meeting(db.Model):
         
         # Check if meeting exists
         normalized_round_type = cls.normalize_round_type(round_type)
-        existing = cls.query.filter(
+        existing = session.query(cls).filter(
             cls.profile_id == profile.profile_id,
             cls.round_type == normalized_round_type,
             cls.is_deleted == False
@@ -181,9 +220,9 @@ class Meeting(db.Model):
                 end_time=end_time,
                 subject=subject
             )
-            db.session.add(meeting)
+            session.add(meeting)
         
-        db.session.commit()
+        session.commit()
         return meeting
 
 
