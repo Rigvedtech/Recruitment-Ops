@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from app.database import db, GUID, postgresql_uuid_default
 from app.models.sla_config import StepNameEnum
+from flask import g
 import uuid
 import enum
 
@@ -35,6 +36,17 @@ class SLATracker(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships are defined in the Requirement model to avoid conflicts
+    
+    @classmethod
+    def get_db_session(cls):
+        """Get the correct database session for the current domain"""
+        try:
+            if hasattr(g, 'db_session') and g.db_session is not None:
+                if hasattr(g.db_session, 'query'):
+                    return g.db_session
+            return db.session
+        except Exception:
+            return db.session
     
     def __repr__(self):
         return f'<SLATracker {self.requirement_id}:{self.step_name.value if self.step_name else None} - {self.sla_status.value if self.sla_status else None}>'
@@ -122,7 +134,8 @@ class SLATracker(db.Model):
                    notes: str = None):
         """Start tracking a new step"""
         # Check if step is already being tracked
-        existing = cls.query.filter_by(
+        session = cls.get_db_session()
+        existing = session.query(cls).filter_by(
             requirement_id=requirement_id, 
             step_name=step_name.value,
             step_completed_at=None
@@ -142,14 +155,15 @@ class SLATracker(db.Model):
             sla_status=SLAStatusEnum.pending
         )
         
-        db.session.add(tracker)
-        db.session.commit()
+        session.add(tracker)
+        session.commit()
         return tracker
     
     @classmethod
     def complete_step(cls, requirement_id: str, step_name: StepNameEnum, completion_time: datetime = None):
         """Complete a step and calculate SLA metrics"""
-        tracker = cls.query.filter_by(
+        session = cls.get_db_session()
+        tracker = session.query(cls).filter_by(
             requirement_id=requirement_id,
             step_name=step_name.value,
             step_completed_at=None
@@ -157,14 +171,15 @@ class SLATracker(db.Model):
         
         if tracker:
             tracker.complete_step(completion_time)
-            db.session.commit()
+            session.commit()
         
         return tracker
     
     @classmethod
     def get_active_steps(cls, requirement_id: str):
         """Get all active (in-progress) steps for a requirement"""
-        return cls.query.filter_by(
+        session = cls.get_db_session()
+        return session.query(cls).filter_by(
             requirement_id=requirement_id,
             step_completed_at=None
         ).order_by(cls.step_started_at).all()
@@ -172,7 +187,8 @@ class SLATracker(db.Model):
     @classmethod
     def get_completed_steps(cls, requirement_id: str):
         """Get all completed steps for a requirement"""
-        return cls.query.filter(
+        session = cls.get_db_session()
+        return session.query(cls).filter(
             cls.requirement_id == requirement_id,
             cls.step_completed_at.isnot(None)
         ).order_by(cls.step_completed_at).all()
@@ -180,12 +196,14 @@ class SLATracker(db.Model):
     @classmethod
     def get_all_steps(cls, requirement_id: str):
         """Get all steps (active and completed) for a requirement"""
-        return cls.query.filter_by(requirement_id=requirement_id).order_by(cls.step_started_at).all()
+        session = cls.get_db_session()
+        return session.query(cls).filter_by(requirement_id=requirement_id).order_by(cls.step_started_at).all()
     
     @classmethod
     def get_breaching_steps(cls):
         """Get all steps that are currently breaching SLA"""
-        active_steps = cls.query.filter_by(step_completed_at=None).all()
+        session = cls.get_db_session()
+        active_steps = session.query(cls).filter_by(step_completed_at=None).all()
         breaching_steps = []
         
         for step in active_steps:
@@ -197,12 +215,13 @@ class SLATracker(db.Model):
     @classmethod
     def update_in_progress_metrics(cls):
         """Update SLA metrics for all in-progress steps in real-time"""
-        in_progress_steps = cls.query.filter_by(step_completed_at=None).all()
+        session = cls.get_db_session()
+        in_progress_steps = session.query(cls).filter_by(step_completed_at=None).all()
         
         for step in in_progress_steps:
             step.calculate_sla_metrics()
         
-        db.session.commit()
+        session.commit()
         return len(in_progress_steps)
     
     @classmethod
