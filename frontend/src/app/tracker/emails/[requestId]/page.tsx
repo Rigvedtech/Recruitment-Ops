@@ -51,7 +51,7 @@ export default function EmailsPage() {
     const fetchEmails = async () => {
       try {
         setLoading(true);
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api';
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api';
         const response = await fetch(`${apiBaseUrl}/tracker/emails/${requestId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch emails');
@@ -79,7 +79,7 @@ export default function EmailsPage() {
 
   const updateEmailStatus = async (emailId: string, newStatus: string) => {
     try {
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api';
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api';
       const response = await fetch(`${apiBaseUrl}/tracker/emails/${emailId}/status`, {
         method: 'PUT',
         headers: {

@@ -25,9 +25,12 @@ const DocxViewer: React.FC<DocxViewerProps> = ({ filePath, fileName }) => {
           const uploadsIndex = filePath.indexOf('\\uploads\\')
           relativePath = filePath.substring(uploadsIndex + 9) // +9 to skip '\uploads\'
           relativePath = relativePath.replace(/\\/g, '/') // Convert backslashes to forward slashes
+        } else if (!filePath.includes('/') && !filePath.includes('\\')) {
+          // If it's just a filename (no path separators), assume it's in job_descriptions folder
+          relativePath = `job_descriptions/${filePath}`
         }
 
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010'
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976'
         const API_BASE_URL = baseUrl.endsWith('/api') ? baseUrl : baseUrl + '/api'
         const response = await fetch(`${API_BASE_URL}/convert-docx-to-html?path=${encodeURIComponent(relativePath)}`)
         
@@ -66,9 +69,12 @@ const DocxViewer: React.FC<DocxViewerProps> = ({ filePath, fileName }) => {
       const uploadsIndex = filePath.indexOf('\\uploads\\')
       relativePath = filePath.substring(uploadsIndex + 9)
       relativePath = relativePath.replace(/\\/g, '/')
+    } else if (!filePath.includes('/') && !filePath.includes('\\')) {
+      // If it's just a filename (no path separators), assume it's in job_descriptions folder
+      relativePath = `job_descriptions/${filePath}`
     }
     
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010'
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976'
     const API_BASE_URL = baseUrl.endsWith('/api') ? baseUrl : baseUrl + '/api'
     const downloadUrl = `${API_BASE_URL}/download-file?path=${encodeURIComponent(relativePath)}`
     const link = document.createElement('a')

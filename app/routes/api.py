@@ -1537,7 +1537,7 @@ def update_requirement_jd():
 
         # Update the requirement with JD information
         requirement.job_description = job_description_text
-        requirement.jd_path = safe_filename
+        requirement.jd_path = file_path  # Store the full path, not just filename
         requirement.job_file_name = original_filename
         requirement.updated_at = datetime.utcnow()
 

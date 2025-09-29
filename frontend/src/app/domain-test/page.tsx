@@ -11,7 +11,7 @@ export default function DomainTestPage() {
   const testDomainConnection = async () => {
     setTesting(true);
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010';
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976';
       
       // Handle case where API_BASE_URL already includes /api
       const baseUrl = API_BASE_URL.endsWith('/api') ? API_BASE_URL : `${API_BASE_URL}/api`;
@@ -107,7 +107,7 @@ export default function DomainTestPage() {
             </p>
             <ul className="list-disc list-inside mt-2 text-sm text-gray-600">
               <li>Detects localhost and overrides with: <code>http://rgvdit-rops.rigvedtech.com:3000</code></li>
-              <li>Calls: <code>POST http://localhost:1010/api/domain/resolve</code></li>
+              <li>Calls: <code>POST http://20.188.122.171:1976/api/domain/resolve</code></li>
               <li>Backend calls: <code>GET http://172.16.16.33:5001/api/external/environment/http%3A//rgvdit-rops.rigvedtech.com%3A3000/</code></li>
               <li>Sets up database connection with returned credentials</li>
             </ul>

@@ -10,7 +10,7 @@ import { formatEmailBody, isHtmlContent, extractPlainText } from '../../utils/em
 import RoleGuard from '../../components/RoleGuard';
 import { getEmailRefreshStatus } from '../../services/api';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api';
 
 function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
     return (

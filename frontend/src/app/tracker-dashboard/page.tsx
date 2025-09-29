@@ -44,7 +44,7 @@ interface StatusAverage {
   color: string;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api';
 
 const statusColors = {
   'New': '#3B82F6',

@@ -287,7 +287,7 @@ export default function RecruiterWorkflowPage() {
     if (userLoaded && requestId) {
       const startSLATracking = async () => {
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api'}/sla/tracking/auto-start/${requestId}`, {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/tracking/auto-start/${requestId}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -393,7 +393,7 @@ export default function RecruiterWorkflowPage() {
   // Function to complete SLA tracking for a workflow step
   const completeSLAStep = async (stepName: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api'}/sla/tracking/complete`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/tracking/complete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1438,7 +1438,7 @@ export default function RecruiterWorkflowPage() {
               formData.append('resume', resumeFile);
               
               // Use fetch directly for file upload to avoid axios header conflicts
-              const resumeResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api'}/profiles/${studentId}/resume`, {
+              const resumeResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/profiles/${studentId}/resume`, {
                 method: 'POST',
                 body: formData,
                 // Don't set Content-Type - let browser set it automatically
@@ -1871,7 +1871,7 @@ export default function RecruiterWorkflowPage() {
       
       if (response.success) {
         // Download the file using full API URL
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api';
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api';
         const downloadUrl = `${API_BASE_URL}${response.download_url}`;
         const link = document.createElement('a');
         link.href = downloadUrl;
@@ -2463,7 +2463,7 @@ export default function RecruiterWorkflowPage() {
       formData.append('resume', file);
       
       // Use fetch directly for file upload to avoid axios header conflicts
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api'}/profiles/${editingProfile.student_id}/resume`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/profiles/${editingProfile.student_id}/resume`, {
         method: 'POST',
         body: formData,
         // Don't set Content-Type - let browser set it automatically
@@ -2502,7 +2502,7 @@ export default function RecruiterWorkflowPage() {
 
   const handleDownloadResume = async (studentId: string) => {
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api';
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api';
       const response = await fetch(`${API_BASE_URL}/profiles/${studentId}/resume`, {
         headers: {
           'Authorization': `Bearer ${JSON.parse(localStorage.getItem('user') || '{}').username || ''}`

@@ -53,7 +53,7 @@ const SLAConfigPage: React.FC = () => {
   const fetchSLAConfigs = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api'}/sla/config`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/config`);
       if (response.ok) {
         const data = await response.json();
         setConfigs(data);
@@ -72,7 +72,7 @@ const SLAConfigPage: React.FC = () => {
       setSaving(prev => ({ ...prev, [stepName]: true }));
       setErrors(prev => ({ ...prev, [stepName]: '' }));
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api'}/sla/config/${stepName}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/config/${stepName}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -129,7 +129,7 @@ const SLAConfigPage: React.FC = () => {
 
   const initializeDefaults = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1010/api'}/sla/config/initialize`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/config/initialize`, {
         method: 'POST',
       });
       
