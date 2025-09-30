@@ -1210,53 +1210,48 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
     }
   }
 
-  const jobTypeOptions = [
-    'Full Time',
-    'Part Time',
-    'Contract',
-    'Temporary',
-    'Internship'
-  ]
+  // Dynamic enum options state - loaded from backend
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>([])
+  const [shiftOptions, setShiftOptions] = useState<string[]>([])
+  const [jobTypeOptions, setJobTypeOptions] = useState<string[]>([])
+  const [priorityOptions, setPriorityOptions] = useState<string[]>([])
 
-  const priorityOptions = [
-    'Low',
-    'Medium',
-    'High',
-    'Urgent'
-  ]
+  // Load enum values from backend on mount
+  useEffect(() => {
+    const loadEnumValues = async () => {
+      try {
+        // Load all enum types
+        const [deptRes, shiftRes, jobTypeRes, priorityRes] = await Promise.all([
+          api.get('/get-enum-values?enum_type=department'),
+          api.get('/get-enum-values?enum_type=shift'),
+          api.get('/get-enum-values?enum_type=job_type'),
+          api.get('/get-enum-values?enum_type=priority')
+        ])
 
-  
+        if (deptRes?.success && Array.isArray(deptRes.values)) {
+          setDepartmentOptions(deptRes.values)
+        }
+        if (shiftRes?.success && Array.isArray(shiftRes.values)) {
+          setShiftOptions(shiftRes.values)
+        }
+        if (jobTypeRes?.success && Array.isArray(jobTypeRes.values)) {
+          setJobTypeOptions(jobTypeRes.values)
+        }
+        if (priorityRes?.success && Array.isArray(priorityRes.values)) {
+          setPriorityOptions(priorityRes.values)
+        }
+      } catch (error) {
+        console.error('Error loading enum values:', error)
+      }
+    }
+
+    loadEnumValues()
+  }, [])
 
   const formatEnumDisplay = (value?: string) => {
     if (!value) return ''
     return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
   }
-
-  // Enumerated dropdown options
-  const departmentOptions = [
-    'Engineering',
-    'Human Resources',
-    'Information Technology',
-    'Customer Support',
-    'Product Management',
-    'Quality Assurance',
-    'Design',
-    'Sales',
-    'Marketing',
-    'Finance',
-    'Operations',
-    'Legal',
-    'Business Development',
-    'Data Science',
-    'HR Operations'
-  ]
-
-  const shiftOptions = [
-    'Day',
-    'Night',
-    'Rotational',
-    'Work From Home'
-  ]
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({
@@ -1472,7 +1467,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   <option value="">Select department</option>
                   {departmentOptions.map((dept) => (
                     <option key={dept} value={dept}>
-                      {dept}
+                      {formatEnumDisplay(dept)}
                     </option>
                   ))}
                 </select>
@@ -1497,7 +1492,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                     <option value="">Select job type</option>
                     {jobTypeOptions.map((option) => (
                       <option key={option} value={option}>
-                        {option}
+                        {formatEnumDisplay(option)}
                       </option>
                     ))}
                   </select>
@@ -1512,7 +1507,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   <option value="">Select shift</option>
                   {shiftOptions.map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {formatEnumDisplay(option)}
                     </option>
                   ))}
                 </select>
@@ -1558,7 +1553,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                     <option value="">Select priority</option>
                     {priorityOptions.map((option) => (
                       <option key={option} value={option}>
-                        {option}
+                        {formatEnumDisplay(option)}
                       </option>
                     ))}
                   </select>

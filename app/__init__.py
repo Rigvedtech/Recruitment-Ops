@@ -39,6 +39,7 @@ def create_app(config_name='default'):
              'https://finquest-rops.rigvedtech.com:3000',
              'http://finq-ops.rigvedtech.com:3000',
              'http://localhost:3000',
+             'http://localhost:6969',
              'http://127.0.0.1:3000'
          ],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

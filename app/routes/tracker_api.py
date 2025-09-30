@@ -706,9 +706,59 @@ def update_tracker_requirement(request_id):
             'minimum_qualification', 'number_of_positions', 'budget_ctc', 
             'priority', 'additional_remarks', 'company_name'
         ]
+        
+        # Helper function to convert display format to enum format
+        def convert_to_enum_format(value, field_name):
+            if not value:
+                return value
+            
+            # Mapping for specific conversions
+            conversions = {
+                'company_name': {
+                    'Tech Corp': 'Tech_Corp',
+                    'Full Time': 'full_time',
+                    'Part Time': 'part_time'
+                },
+                'job_type': {
+                    'Full Time': 'full_time',
+                    'Part Time': 'part_time'
+                },
+                'priority': {
+                    'High': 'high',
+                    'Medium': 'medium', 
+                    'Low': 'low',
+                    'Urgent': 'urgent'
+                },
+                'shift': {
+                    'Day': 'Day',
+                    'Night': 'Night',
+                    'Rotational': 'rotational',
+                    'Flexible': 'flexible'
+                },
+                'department': {
+                    'Human Resources': 'Human_Resources',
+                    'Information Technology': 'Information_Technology',
+                    'Product Management': 'Product_Management',
+                    'Quality Assurance': 'Quality_Assurance',
+                    'Business Development': 'Business_Development',
+                    'Customer Support': 'Customer_Support'
+                }
+            }
+            
+            # Check if there's a specific conversion for this field and value
+            if field_name in conversions and value in conversions[field_name]:
+                return conversions[field_name][value]
+            
+            # Default conversion: replace spaces with underscores and keep case
+            return value.replace(' ', '_')
+        
         for field in allowed_fields:
             if field in data:
-                setattr(requirement, field, data[field])
+                value = data[field]
+                # Convert enum fields to proper format
+                if field in ['company_name', 'job_type', 'priority', 'department', 'shift']:
+                    value = convert_to_enum_format(value, field)
+                setattr(requirement, field, value)
         
         # Handle tentative_doj field specially for date conversion
         if 'tentative_doj' in data:
@@ -805,7 +855,7 @@ def update_tracker_requirement(request_id):
             
             started_trackers = SLAService.auto_start_workflow_steps(
                 requirement_id=str(requirement.requirement_id),
-                current_status=requirement.status.value if requirement.status else 'Open',
+                current_status=requirement.status if requirement.status else 'Open',
                 user_id=user_id
             )
             current_app.logger.info(f"Auto-started {len(started_trackers)} SLA tracking entries for {request_id}")
@@ -1964,10 +2014,14 @@ def create_profiles():
             profile.requirement_id = requirement.requirement_id
             profile.updated_at = datetime.utcnow()
         
-        # Update requirement status to 'Candidate_Submission' if it's still 'Open'
-        if requirement.status == 'Open':
-            requirement.status = 'Candidate_Submission'
-            requirement.updated_at = datetime.utcnow()
+        # Update requirement status to Candidate_Submission if it's still Open
+        try:
+            from app.models.requirement import RequirementStatusEnum
+            if requirement.status == RequirementStatusEnum.Open:
+                requirement.status = RequirementStatusEnum.Candidate_Submission
+                requirement.updated_at = datetime.utcnow()
+        except Exception as e:
+            current_app.logger.warning(f"Could not set requirement status to Candidate_Submission on profile creation: {str(e)}")
         
         # Commit all changes at once
         get_db_session().commit()
@@ -2214,7 +2268,8 @@ def can_move_profile(profile_id, request_id):
                 'error_code': 'TARGET_REQUIREMENT_NOT_FOUND'
             }), 404
         
-        if target_requirement.status == 'Closed':
+        from app.models.requirement import RequirementStatusEnum
+        if target_requirement.status == RequirementStatusEnum.Closed:
             return jsonify({
                 'can_move': False,
                 'error': 'Cannot move profile to a closed requirement',

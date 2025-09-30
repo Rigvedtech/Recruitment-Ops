@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request, current_app, g
-from app.models.requirement import Requirement, RequirementStatusEnum
+from app.models.requirement import Requirement, RequirementStatusEnum, format_enum_for_display
 from app.models.profile import Profile
 from app.models.screening import Screening, ScreeningStatusEnum
 from app.models.interview_scheduled import InterviewScheduled, InterviewScheduledStatusEnum
@@ -154,17 +154,20 @@ def get_workflow_progress(request_id):
         
         workflow_data['step_timestamps'] = profile_timestamps
         
-        # Determine current step based on requirement status
+        # Determine current step based on requirement status (use enum values)
         if requirement.status:
             status_to_step = {
                 'Open': 'candidate_submission',
-                'Candidate Submission': 'candidate_submission',
-                'Interview Scheduled': 'interview_scheduled',
-                'Offer Recommendation': 'offered',
-                'On boarding': 'onboarding',
+                'Candidate_Submission': 'candidate_submission',
+                'Interview_Scheduled': 'interview_scheduled',
+                'Offer_Recommendation': 'offered',
+                'On_Boarding': 'onboarding',
                 'Closed': 'onboarding'
             }
-            workflow_data['current_step'] = status_to_step.get(requirement.status.value, 'candidate_submission')
+            workflow_data['current_step'] = status_to_step.get(getattr(requirement.status, 'value', str(requirement.status)), 'candidate_submission')
+            # Add display-friendly status for frontend (no underscores)
+            workflow_data['requirement_status'] = getattr(requirement.status, 'value', str(requirement.status))
+            workflow_data['requirement_status_display'] = format_enum_for_display(workflow_data['requirement_status'])
         
         return jsonify({
             'success': True,
@@ -261,6 +264,14 @@ def update_workflow_step():
                         screening.status = ScreeningStatusEnum(status)
                         screening.status_timestamp = datetime.utcnow()
                         screening.updated_by = current_user.user_id if current_user else None
+                    
+                    # Auto-update requirement status to Candidate_Submission when screening activity occurs
+                    try:
+                        if requirement.status != RequirementStatusEnum.Candidate_Submission:
+                            requirement.status = RequirementStatusEnum.Candidate_Submission
+                            requirement.updated_at = datetime.utcnow()
+                    except Exception as e:
+                        current_app.logger.warning(f"Could not set requirement status to Candidate_Submission: {str(e)}")
                 
                 elif step == 'interview_scheduled':
                     interview_scheduled = get_db_session().query(InterviewScheduled).filter_by(
@@ -531,17 +542,20 @@ def get_workflow_state(request_id):
         
         workflow_state['stepTimestamps'] = profile_timestamps
         
-        # Determine current step based on requirement status
+        # Determine current step based on requirement status (use enum values)
         if requirement.status:
             status_to_step = {
                 'Open': 'candidate_submission',
-                'Candidate Submission': 'candidate_submission',
-                'Interview Scheduled': 'interview_scheduled',
-                'Offer Recommendation': 'offered',
-                'On boarding': 'onboarding',
+                'Candidate_Submission': 'candidate_submission',
+                'Interview_Scheduled': 'interview_scheduled',
+                'Offer_Recommendation': 'offered',
+                'On_Boarding': 'onboarding',
                 'Closed': 'onboarding'
             }
-            workflow_state['currentStep'] = status_to_step.get(requirement.status.value, 'candidate_submission')
+            workflow_state['currentStep'] = status_to_step.get(getattr(requirement.status, 'value', str(requirement.status)), 'candidate_submission')
+            # Add display-friendly status for frontend (no underscores)
+            workflow_state['requirementStatus'] = getattr(requirement.status, 'value', str(requirement.status))
+            workflow_state['requirementStatusDisplay'] = format_enum_for_display(workflow_state['requirementStatus'])
         
         return jsonify(workflow_state)
         

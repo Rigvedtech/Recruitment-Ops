@@ -338,7 +338,7 @@ class SLAService:
             alert = {
                 'requirement_id': step.requirement_id,
                 'job_title': requirement.job_title if requirement else None,
-                'company_name': requirement.company_name.value if requirement and requirement.company_name else None,
+                'company_name': requirement.company_name if requirement and requirement.company_name else None,
                 'step_name': step.step_name.value if step.step_name else str(step.step_name),
                 'step_display_name': step.step_name.value if step.step_name else str(step.step_name),
                 'user_id': step.user_id,

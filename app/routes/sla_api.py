@@ -242,7 +242,7 @@ def auto_start_workflow_steps(requirement_id):
         
         started_trackers = SLAService.auto_start_workflow_steps(
             requirement_id=str(requirement.requirement_id),
-            current_status=requirement.status.value if requirement.status else 'Open',
+            current_status=requirement.status if requirement.status else 'Open',
             user_id=user_id
         )
         
@@ -268,7 +268,7 @@ def auto_start_workflow_steps_by_request(request_id):
         
         started_trackers = SLAService.auto_start_workflow_steps(
             requirement_id=str(requirement.requirement_id),
-            current_status=requirement.status.value if requirement.status else 'Open',
+            current_status=requirement.status if requirement.status else 'Open',
             user_id=user_id
         )
         
@@ -422,8 +422,8 @@ def get_breaching_requests():
                 'sla_limit_hours': step.sla_hours,
                 'requirement': {
                     'job_title': requirement.job_title if requirement else None,
-                    'company_name': requirement.company_name.value if requirement and requirement.company_name else None,
-                    'status': requirement.status.value if requirement and requirement.status else None
+                    'company_name': requirement.company_name if requirement and requirement.company_name else None,
+                    'status': requirement.status if requirement and requirement.status else None
                 }
             })
         

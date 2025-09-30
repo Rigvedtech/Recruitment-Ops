@@ -48,8 +48,8 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Don't render anything if user is not available
-  if (!user) {
+  // Don't render anything if user is not available or user_id is not set
+  if (!user || !user.user_id) {
     return null;
   }
 
@@ -76,6 +76,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
 
   // Fetch notifications
   const fetchNotifications = async () => {
+    // Safety check: ensure user and user_id are available
+    if (!user || !user.user_id) {
+      console.warn('Cannot fetch notifications: user or user_id is not available');
+      return;
+    }
+
     try {
       setLoading(true);
       
@@ -126,6 +132,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
 
   // Fetch unread count only
   const fetchUnreadCount = async () => {
+    // Safety check: ensure user and user_id are available
+    if (!user || !user.user_id) {
+      console.warn('Cannot fetch unread count: user or user_id is not available');
+      return;
+    }
+
     try {
       if (user.role === 'admin') {
         // Admin needs to get unread count from all users
@@ -162,6 +174,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
 
   // Mark notification as read
   const markAsRead = async (notificationId: number) => {
+    // Safety check: ensure user and user_id are available
+    if (!user || !user.user_id) {
+      console.warn('Cannot mark notification as read: user or user_id is not available');
+      return;
+    }
+
     try {
       const response = await fetch(`${getApiBaseUrl()}/notifications/${notificationId}/read`, {
         method: 'POST',
@@ -191,6 +209,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
 
   // Mark all as read
   const markAllAsRead = async () => {
+    // Safety check: ensure user and user_id are available
+    if (!user || !user.user_id) {
+      console.warn('Cannot mark all notifications as read: user or user_id is not available');
+      return;
+    }
+
     try {
       const response = await fetch(`${getApiBaseUrl()}/notifications/mark-all-read`, {
         method: 'POST',

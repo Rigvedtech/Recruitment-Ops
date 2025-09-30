@@ -3242,10 +3242,10 @@ def get_recruiter_activity():
         while current_date <= end_date:
             date_str = current_date.strftime('%Y-%m-%d')
             
-            # Get profiles submitted on this date
+            # Get profiles submitted on this date, include requirement_id for attribution
             profiles_submitted = get_db_session().query(
                 Profile.profile_id,
-                Profile.candidate_name,
+                Profile.requirement_id,
                 Profile.created_at
             ).filter(
                 func.date(Profile.created_at) == current_date
@@ -3269,10 +3269,9 @@ def get_recruiter_activity():
             # Create a mapping of profile_id to requirement_id using the new schema
             profile_to_requirement = {}
             for profile in profiles_submitted:
-                # Get the requirement linked to this profile
-                requirement = get_db_session().query(Requirement).filter_by(requirement_id=profile.requirement_id).first() if hasattr(profile, 'requirement_id') else None
-                if requirement:
-                    profile_to_requirement[str(profile.profile_id)] = str(requirement.requirement_id)
+                # profile tuple includes requirement_id already from the query
+                if getattr(profile, 'requirement_id', None):
+                    profile_to_requirement[str(profile.profile_id)] = str(profile.requirement_id)
             
             # Count profiles per recruiter for this date
             recruiter_counts = {recruiter: 0 for recruiter in recruiter_usernames}
@@ -3285,12 +3284,12 @@ def get_recruiter_activity():
                             recruiter_counts[recruiter] += 1
                             break  # Count only once per profile
             
-            # Get active recruiters (those who submitted 6 or more profiles)
+            # Get active recruiters (consider active if submitted at least 1 profile)
             active_recruiters = [
                 {
                     'username': recruiter,
                     'profiles_submitted': count,
-                    'is_active': count > 5
+                    'is_active': count > 0
                 }
                 for recruiter, count in recruiter_counts.items()
             ]
@@ -3300,7 +3299,7 @@ def get_recruiter_activity():
             
             # Calculate totals
             total_profiles = sum(count for count in recruiter_counts.values())
-            active_recruiter_count = sum(1 for count in recruiter_counts.values() if count > 5)
+            active_recruiter_count = sum(1 for count in recruiter_counts.values() if count > 0)
             
             daily_activity.append({
                 'date': date_str,
