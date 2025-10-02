@@ -27,6 +27,8 @@ class SLAService:
     @staticmethod
     def get_all_active_configs() -> List[SLAConfig]:
         """Get all active SLA configurations"""
+        # Ensure default configs exist if none are present
+        SLAConfig.ensure_default_configs_exist()
         return SLAConfig.get_active_configs()
     
     @staticmethod

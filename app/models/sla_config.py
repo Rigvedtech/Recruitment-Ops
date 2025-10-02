@@ -38,8 +38,10 @@ class SLAConfig(db.Model):
     
     def to_dict(self):
         return {
+            'id': str(self.sla_config_id) if self.sla_config_id else None,
             'sla_config_id': str(self.sla_config_id) if self.sla_config_id else None,
             'step_name': self.step_name.value if self.step_name else None,
+            'step_display_name': self.step_name.value.replace('_', ' ').title() if self.step_name else None,
             'sla_hours': self.sla_hours,
             'sla_days': self.sla_days,
             'is_active': self.is_active,
@@ -70,69 +72,77 @@ class SLAConfig(db.Model):
     
     @classmethod
     def initialize_default_configs(cls):
-        """Initialize default SLA configurations if none exist"""
+        """Initialize default SLA configurations, replacing existing ones"""
+        # Delete all existing configurations first
+        cls.query.delete()
+        
+        default_configs = [
+            {
+                'step_name': StepNameEnum.open,
+                'sla_hours': 24,
+                'sla_days': 1,
+                'priority': 1,
+                'description': 'Time to start working on the requirement after it is opened'
+            },
+            {
+                'step_name': StepNameEnum.candidate_submission,
+                'sla_hours': 24,
+                'sla_days': 1,
+                'priority': 2,
+                'description': 'Time to submit candidate profiles after requirement received'
+            },
+            {
+                'step_name': StepNameEnum.screening,
+                'sla_hours': 48,
+                'sla_days': 2,
+                'priority': 3,
+                'description': 'Time to complete initial screening of candidates'
+            },
+            {
+                'step_name': StepNameEnum.interview_scheduled,
+                'sla_hours': 48,
+                'sla_days': 2,
+                'priority': 4,
+                'description': 'Time to schedule interviews after screening'
+            },
+            {
+                'step_name': StepNameEnum.interview_round_1,
+                'sla_hours': 168,
+                'sla_days': 2,
+                'priority': 5,
+                'description': 'Time to complete first round of interviews'
+            },
+            {
+                'step_name': StepNameEnum.interview_round_2,
+                'sla_hours': 48,
+                'sla_days': 2,
+                'priority': 6,
+                'description': 'Time to complete second round of interviews'
+            },
+            {
+                'step_name': StepNameEnum.offered,
+                'sla_hours': 48,
+                'sla_days': 2,
+                'priority': 7,
+                'description': 'Time to make offer recommendation after final interview'
+            },
+            {
+                'step_name': StepNameEnum.onboarding,
+                'sla_hours': 96,
+                'sla_days': 4,
+                'priority': 8,
+                'description': 'Time to complete onboarding process'
+            }
+        ]
+        
+        for config_data in default_configs:
+            config = cls(**config_data)
+            db.session.add(config)
+        
+        db.session.commit()
+    
+    @classmethod
+    def ensure_default_configs_exist(cls):
+        """Initialize default SLA configurations only if none exist"""
         if cls.query.count() == 0:
-            default_configs = [
-                {
-                    'step_name': StepNameEnum.open,
-                    'sla_hours': 24,
-                    'sla_days': 1,
-                    'priority': 1,
-                    'description': 'Time to start working on the requirement after it is opened'
-                },
-                {
-                    'step_name': StepNameEnum.candidate_submission,
-                    'sla_hours': 24,
-                    'sla_days': 1,
-                    'priority': 2,
-                    'description': 'Time to submit candidate profiles after requirement received'
-                },
-                {
-                    'step_name': StepNameEnum.screening,
-                    'sla_hours': 48,
-                    'sla_days': 2,
-                    'priority': 3,
-                    'description': 'Time to complete initial screening of candidates'
-                },
-                {
-                    'step_name': StepNameEnum.interview_scheduled,
-                    'sla_hours': 48,
-                    'sla_days': 2,
-                    'priority': 4,
-                    'description': 'Time to schedule interviews after screening'
-                },
-                {
-                    'step_name': StepNameEnum.interview_round_1,
-                    'sla_hours': 168,
-                    'sla_days': 2,
-                    'priority': 5,
-                    'description': 'Time to complete first round of interviews'
-                },
-                {
-                    'step_name': StepNameEnum.interview_round_2,
-                    'sla_hours': 48,
-                    'sla_days': 2,
-                    'priority': 6,
-                    'description': 'Time to complete second round of interviews'
-                },
-                {
-                    'step_name': StepNameEnum.offered,
-                    'sla_hours': 48,
-                    'sla_days': 2,
-                    'priority': 7,
-                    'description': 'Time to make offer recommendation after final interview'
-                },
-                {
-                    'step_name': StepNameEnum.onboarding,
-                    'sla_hours': 96,
-                    'sla_days': 4,
-                    'priority': 8,
-                    'description': 'Time to complete onboarding process'
-                }
-            ]
-            
-            for config_data in default_configs:
-                config = cls(**config_data)
-                db.session.add(config)
-            
-            db.session.commit()
+            cls.initialize_default_configs()

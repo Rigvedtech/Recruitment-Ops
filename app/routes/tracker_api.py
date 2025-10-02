@@ -468,6 +468,9 @@ def get_tracker_requirements():
                     sender_email = primary_req.email_details[0].sender_email or ''
                     sender_name = primary_req.email_details[0].sender_name or ''
                     received_datetime = primary_req.email_details[0].received_datetime
+                elif primary_req.is_manual_requirement:
+                    # For manual requirements, use created_at as received_datetime
+                    received_datetime = primary_req.created_at
                 
                 result.append({
                     'id': primary_req.requirement_id,
@@ -552,6 +555,9 @@ def get_tracker_requirements():
                     sender_name = req.email_details[0].sender_name or ''
                     received_datetime = req.email_details[0].received_datetime
                     thread_id = req.email_details[0].thread_id
+                elif req.is_manual_requirement:
+                    # For manual requirements, use created_at as received_datetime
+                    received_datetime = req.created_at
                 
                 result.append({
                     'id': req.requirement_id,
@@ -757,7 +763,11 @@ def update_tracker_requirement(request_id):
                 value = data[field]
                 # Convert enum fields to proper format
                 if field in ['company_name', 'job_type', 'priority', 'department', 'shift']:
-                    value = convert_to_enum_format(value, field)
+                    # Handle empty strings for enum fields - convert to None
+                    if not value or (isinstance(value, str) and value.strip() == ''):
+                        value = None
+                    else:
+                        value = convert_to_enum_format(value, field)
                 setattr(requirement, field, value)
         
         # Handle tentative_doj field specially for date conversion
