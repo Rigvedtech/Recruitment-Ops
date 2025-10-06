@@ -14,6 +14,7 @@ class DatabaseManager:
         self.cache_service = DomainCacheService()
         self.api_client = None
         self._domain_mappings = {
+            'rigved-rops.rigvedtech.com:3000': 'rigvedtech_prod',
             'rgvdit-rops.rigvedtech.com:3000': 'rigvedit_prod',
             'finquest-rops.rigvedtech.com:3000': 'finquest_recops',
             'localhost:3000': 'rigvedit_dev',

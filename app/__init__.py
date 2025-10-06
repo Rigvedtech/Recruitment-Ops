@@ -33,6 +33,8 @@ def create_app(config_name='default'):
     # Initialize CORS with security settings
     CORS(app, 
          origins=[
+            'http://rigved-rops.rigvedtech.com:3000',
+            'https://rigved-rops.rigvedtech.com:3000',
              'http://rgvdit-rops.rigvedtech.com:3000',
              'https://rgvdit-rops.rigvedtech.com:3000',
              'http://finquest-rops.rigvedtech.com:3000',
