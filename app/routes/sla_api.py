@@ -7,6 +7,7 @@ from app.database import db
 from datetime import datetime, timedelta
 import traceback
 from app.middleware.domain_auth import require_domain_auth
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 def get_db_session():
     """
@@ -55,7 +56,7 @@ sla_bp = Blueprint('sla', __name__, url_prefix='/api/sla')
 @sla_bp.route('/config', methods=['GET'])
 @require_domain_auth
 def get_sla_configs():
-    """Get all SLA configurations"""
+    """Get all SLA configurations for the current domain"""
     try:
         configs = SLAService.get_all_active_configs()
         return jsonify([config.to_dict() for config in configs])
@@ -64,6 +65,7 @@ def get_sla_configs():
         return jsonify({'error': 'Failed to fetch SLA configurations'}), 500
 
 @sla_bp.route('/config/<string:step_name>', methods=['GET'])
+@require_domain_auth
 def get_sla_config(step_name):
     """Get SLA configuration for a specific step"""
     try:
@@ -83,6 +85,7 @@ def get_sla_config(step_name):
         return jsonify({'error': 'Failed to fetch SLA configuration'}), 500
 
 @sla_bp.route('/config/<string:step_name>', methods=['PUT'])
+@require_domain_auth
 def update_sla_config(step_name):
     """Update SLA configuration for a step"""
     try:
@@ -112,6 +115,7 @@ def update_sla_config(step_name):
         return jsonify({'error': 'Failed to update SLA configuration'}), 500
 
 @sla_bp.route('/config/initialize', methods=['POST'])
+@require_domain_auth
 def initialize_sla_configs():
     """Initialize default SLA configurations"""
     try:
@@ -423,7 +427,7 @@ def get_breaching_requests():
                 'requirement': {
                     'job_title': requirement.job_title if requirement else None,
                     'company_name': requirement.company_name if requirement and requirement.company_name else None,
-                    'status': requirement.status if requirement and requirement.status else None
+                    'status': requirement.status.value if requirement and requirement.status else None
                 }
             })
         
