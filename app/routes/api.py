@@ -661,20 +661,24 @@ def get_profiles():
         # Get total count for pagination
         total_count = query.count()
         
+        # Calculate pagination values
+        offset = (page - 1) * per_page
+        total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
+        has_next = page < total_pages
+        has_prev = page > 1
+        
         # Apply pagination and ordering
-        profiles = query.order_by(Profile.created_at.desc()).paginate(
-            page=page, per_page=per_page, error_out=False
-        )
+        profiles = query.order_by(Profile.created_at.desc()).offset(offset).limit(per_page).all()
         
         return jsonify({
-            'profiles': [profile.to_dict() for profile in profiles.items],
+            'profiles': [profile.to_dict() for profile in profiles],
             'pagination': {
                 'page': page,
                 'per_page': per_page,
                 'total': total_count,
-                'pages': profiles.pages,
-                'has_next': profiles.has_next,
-                'has_prev': profiles.has_prev
+                'pages': total_pages,
+                'has_next': has_next,
+                'has_prev': has_prev
             }
         })
     except Exception as e:

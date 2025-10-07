@@ -272,11 +272,11 @@ export async function fetchProfilesData(filters?: {
     }
     
     const url = getApiUrl(`/profiles${params.toString() ? `?${params.toString()}` : ''}`);
+    const headers = getAuthHeaders();
+    
     const response = await fetch(url, {
         method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers,
     });
 
     if (!response.ok) {
