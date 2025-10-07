@@ -1682,13 +1682,25 @@ def get_profiles_count():
         
         for req in requirements:
             # Get profiles linked to this requirement
-            profiles = get_db_session().query(Profile).filter(
-                Profile.requirement_id == req.requirement_id,
-                Profile.deleted_at.is_(None)
-            ).all()
-            profile_count = len(profiles)
-            # Calculate onboarded count from profile status
-            onboarded_count = len([p for p in profiles if p.status and p.status.value == 'onboarded'])
+            try:
+                profiles = get_db_session().query(Profile).filter(
+                    Profile.requirement_id == req.requirement_id,
+                    Profile.deleted_at.is_(None)
+                ).all()
+                profile_count = len(profiles)
+                # Calculate onboarded count from profile status
+                onboarded_count = len([p for p in profiles if p.status and p.status.value == 'onboarded'])
+            except Exception as profile_error:
+                current_app.logger.warning(f"Error loading profiles for requirement {req.requirement_id}: {str(profile_error)}")
+                # Fallback: use raw SQL to count profiles
+                from sqlalchemy import text
+                count_result = get_db_session().execute(text("""
+                    SELECT COUNT(*) as count 
+                    FROM profiles 
+                    WHERE requirement_id = :req_id AND deleted_at IS NULL
+                """), {"req_id": str(req.requirement_id)})
+                profile_count = count_result.scalar() or 0
+                onboarded_count = 0  # Set to 0 as fallback
             
             # Get breach time display
             breach_time_display = get_breach_time_display(req.requirement_id)

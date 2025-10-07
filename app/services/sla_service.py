@@ -324,7 +324,7 @@ class SLAService:
         
         for step in breaching_steps:
             # Get requirement details for job title and company name
-            requirement = Requirement.query.filter_by(requirement_id=step.requirement_id).first()
+            requirement = db.session.query(Requirement).filter_by(requirement_id=step.requirement_id).first()
             
             # Calculate breach time in a clean format
             breach_hours = step.sla_breach_hours or 0

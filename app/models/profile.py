@@ -11,6 +11,8 @@ class SourceEnum(enum.Enum):
     freshersworld = "freshersworld"
     github_stackoverflow = "github_stackoverflow"
     internshala = "internshala"
+    linkedin = "LinkedIn"
+    referral = "Referral"
 
 class ProfileStatusEnum(enum.Enum):
     onboarded = "onboarded"

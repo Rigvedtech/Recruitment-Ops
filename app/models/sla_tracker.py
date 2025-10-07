@@ -227,7 +227,8 @@ class SLATracker(db.Model):
     @classmethod
     def get_sla_metrics(cls, requirement_id: str = None, step_name: StepNameEnum = None):
         """Get SLA metrics for analysis"""
-        query = cls.query
+        session = cls.get_db_session()
+        query = session.query(cls)
         
         if requirement_id:
             query = query.filter_by(requirement_id=requirement_id)

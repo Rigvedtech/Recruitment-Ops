@@ -3214,6 +3214,8 @@ export default function RecruiterWorkflowPage() {
                               <option value="freshersworld">FreshersWorld</option>
                               <option value="github_stackoverflow">GitHub/StackOverflow</option>
                               <option value="internshala">Internshala</option>
+                              <option value="LinkedIn">LinkedIn</option>
+                              <option value="Referral">Referral</option>
                             </select>
                           </div>
                           

@@ -95,47 +95,68 @@ export default function SLADashboard() {
     loadDashboardData();
   }, [router]);
 
+  const getAuthHeaders = () => {
+    const domain = window.location.host;
+    const headers: Record<string, string> = {
+      'X-Original-Domain': domain,
+      'Content-Type': 'application/json',
+    };
+
+    const user = localStorage.getItem('user');
+    if (user) {
+      try {
+        const userData = JSON.parse(user);
+        headers['Authorization'] = `Bearer ${userData.username}`;
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+      }
+    }
+
+    return headers;
+  };
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
+      const headers = getAuthHeaders();
       
       // Load global metrics
-      const globalResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/global-metrics`);
+      const globalResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/global-metrics`, { headers });
       if (globalResponse.ok) {
         const globalData = await globalResponse.json();
         setGlobalMetrics(globalData);
       }
 
       // Load step-wise metrics
-      const stepResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/step-wise-metrics`);
+      const stepResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/step-wise-metrics`, { headers });
       if (stepResponse.ok) {
         const stepData = await stepResponse.json();
         setStepWiseMetrics(stepData);
       }
 
       // Load alerts
-      const alertsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/alerts`);
+      const alertsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/alerts`, { headers });
       if (alertsResponse.ok) {
         const alertsData = await alertsResponse.json();
         setAlerts(alertsData);
       }
 
       // Load breaching requests
-      const breachingResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/breaching-requests`);
+      const breachingResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/breaching-requests`, { headers });
       if (breachingResponse.ok) {
         const breachingData = await breachingResponse.json();
         setBreachingRequests(breachingData);
       }
 
       // Load trends
-      const trendsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/trends`);
+      const trendsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/trends`, { headers });
       if (trendsResponse.ok) {
         const trendsData = await trendsResponse.json();
         setTrends(trendsData.trends || []);
       }
 
       // Load recruiter metrics
-      const recruiterResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/recruiter-metrics`);
+      const recruiterResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sla/dashboard/recruiter-metrics`, { headers });
       if (recruiterResponse.ok) {
         const recruiterData = await recruiterResponse.json();
         setRecruiterMetrics(recruiterData);

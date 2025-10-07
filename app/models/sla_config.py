@@ -63,18 +63,18 @@ class SLAConfig(db.Model):
     @classmethod
     def get_active_configs(cls):
         """Get all active SLA configurations ordered by priority"""
-        return cls.query.filter_by(is_active=True).order_by(cls.priority).all()
+        return db.session.query(cls).filter_by(is_active=True).order_by(cls.priority).all()
     
     @classmethod
     def get_config_by_step(cls, step_name: StepNameEnum):
         """Get SLA configuration for a specific step"""
-        return cls.query.filter_by(step_name=step_name.value, is_active=True).first()
+        return db.session.query(cls).filter_by(step_name=step_name.value, is_active=True).first()
     
     @classmethod
     def initialize_default_configs(cls):
         """Initialize default SLA configurations, replacing existing ones"""
         # Delete all existing configurations first
-        cls.query.delete()
+        db.session.query(cls).delete()
         
         default_configs = [
             {
@@ -144,5 +144,5 @@ class SLAConfig(db.Model):
     @classmethod
     def ensure_default_configs_exist(cls):
         """Initialize default SLA configurations only if none exist"""
-        if cls.query.count() == 0:
+        if db.session.query(cls).count() == 0:
             cls.initialize_default_configs()

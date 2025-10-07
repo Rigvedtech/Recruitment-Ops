@@ -50,10 +50,33 @@ const SLAConfigPage: React.FC = () => {
     fetchSLAConfigs();
   }, [router]);
 
+  const getAuthHeaders = () => {
+    const domain = window.location.host;
+    const headers: Record<string, string> = {
+      'X-Original-Domain': domain,
+      'Content-Type': 'application/json',
+    };
+
+    const user = localStorage.getItem('user');
+    if (user) {
+      try {
+        const userData = JSON.parse(user);
+        headers['Authorization'] = `Bearer ${userData.username}`;
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+      }
+    }
+
+    return headers;
+  };
+
   const fetchSLAConfigs = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/config`);
+      const headers = getAuthHeaders();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/config`, {
+        headers
+      });
       if (response.ok) {
         const data = await response.json();
         setConfigs(data);
@@ -72,11 +95,10 @@ const SLAConfigPage: React.FC = () => {
       setSaving(prev => ({ ...prev, [stepName]: true }));
       setErrors(prev => ({ ...prev, [stepName]: '' }));
 
+      const headers = getAuthHeaders();
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/config/${stepName}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(updatedConfig),
       });
 
