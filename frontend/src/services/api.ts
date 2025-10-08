@@ -171,6 +171,30 @@ export const getStudents = async (filters?: StudentFilters) => {
     }
 };
 
+// Reports and enums helpers
+export const getEnumValues = async (enumType: 'company' | 'department' | 'shift' | 'job_type' | 'priority') => {
+    const headers = getAuthHeaders();
+    const response = await fetch(getApiUrl(`/get-enum-values?enum_type=${enumType}`), { headers });
+    if (!response.ok) {
+        throw new Error('Failed to fetch enum values');
+    }
+    return response.json();
+};
+
+export const getRecruitmentReport = async (params: { date_from?: string; date_to?: string; company?: string }) => {
+    const headers = getAuthHeaders();
+    const search = new URLSearchParams();
+    if (params.date_from) search.append('date_from', params.date_from);
+    if (params.date_to) search.append('date_to', params.date_to);
+    if (params.company) search.append('company', params.company);
+    const qs = search.toString() ? `?${search.toString()}` : '';
+    const response = await fetch(getApiUrl(`/reports/recruitment${qs}`), { headers });
+    if (!response.ok) {
+        throw new Error('Failed to generate report');
+    }
+    return response.json();
+};
+
 export const getStudent = async (id: number) => {
     try {
         const response = await axiosApi.get(`/students/${id}`);
