@@ -70,6 +70,23 @@ def format_enum_for_display(value):
     # Replace underscores with spaces and title case each word
     return value.replace('_', ' ').title()
 
+def _get_assigned_recruiters_for_requirement(requirement_id):
+    """Get the list of assigned recruiters for a requirement using Assignment model"""
+    try:
+        from app.models.assignment import Assignment
+        
+        assignments = Assignment.get_active_assignments_for_requirement(requirement_id)
+        recruiters = []
+        
+        for assignment in assignments:
+            if assignment.user and assignment.user.role.value == 'recruiter':
+                recruiters.append(assignment.user.username)
+        
+        return recruiters
+    except Exception as e:
+        current_app.logger.error(f"Error getting assigned recruiters for requirement {requirement_id}: {str(e)}")
+        return []
+
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 
@@ -858,7 +875,7 @@ def get_requirements():
                 'tentative_doj': r.tentative_doj.isoformat() if r.tentative_doj else None,
                 'additional_remarks': r.additional_remarks,
                 'assigned_to': get_db_session().query(User).filter_by(user_id=r.user_id).first().username if r.user_id else None,
-                'assigned_recruiters': [get_db_session().query(User).filter_by(user_id=r.user_id).first().username] if r.user_id else [],
+                'assigned_recruiters': _get_assigned_recruiters_for_requirement(r.requirement_id),
                 'is_manual_requirement': r.is_manual_requirement,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
                 'updated_at': r.updated_at.isoformat() if r.updated_at else None,

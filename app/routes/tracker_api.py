@@ -75,17 +75,21 @@ def _get_assigned_user_display(user_id):
     else:
         return None  # This will be treated as unassigned
 
-def _get_assigned_recruiters_display(user_id):
-    """Get the list of assigned recruiters, excluding admins"""
-    if not user_id:
-        return []
-    user = get_db_session().query(User).filter_by(user_id=user_id).first()
-    if not user:
-        return []
-    # Only include recruiters, not admins
-    if user.role.value == 'recruiter':
-        return [user.username]
-    else:
+def _get_assigned_recruiters_display(requirement_id):
+    """Get the list of assigned recruiters for a requirement, excluding admins"""
+    try:
+        from app.models.assignment import Assignment
+        
+        assignments = Assignment.get_active_assignments_for_requirement(requirement_id)
+        recruiters = []
+        
+        for assignment in assignments:
+            if assignment.user and assignment.user.role.value == 'recruiter':
+                recruiters.append(assignment.user.username)
+        
+        return recruiters
+    except Exception as e:
+        current_app.logger.error(f"Error getting assigned recruiters for requirement {requirement_id}: {str(e)}")
         return []
 
 def normalize_subject(subject):
@@ -483,7 +487,7 @@ def get_tracker_requirements():
                     'received_datetime': received_datetime.isoformat() if received_datetime else None,
                     'status': primary_req.status.value if primary_req.status else None,
                     'assigned_to': _get_assigned_user_display(primary_req.user_id),
-                    'assigned_recruiters': _get_assigned_recruiters_display(primary_req.user_id),
+                    'assigned_recruiters': _get_assigned_recruiters_display(primary_req.requirement_id),
                     'notes': primary_req.notes,
                     'created_at': primary_req.created_at.isoformat() if primary_req.created_at else None,
                     'updated_at': primary_req.updated_at.isoformat() if primary_req.updated_at else None,
@@ -570,7 +574,7 @@ def get_tracker_requirements():
                     'received_datetime': received_datetime.isoformat() if received_datetime else None,
                     'status': req.status.value if req.status else None,
                     'assigned_to': _get_assigned_user_display(req.user_id),
-                    'assigned_recruiters': _get_assigned_recruiters_display(req.user_id),
+                    'assigned_recruiters': _get_assigned_recruiters_display(req.requirement_id),
                     'notes': req.notes,
                     'created_at': req.created_at.isoformat() if req.created_at else None,
                     'updated_at': req.updated_at.isoformat() if req.updated_at else None,
@@ -781,37 +785,55 @@ def update_tracker_requirement(request_id):
             else:
                 requirement.tentative_doj = None
         
-        # Handle assigned_to field specially for multiple recruiters
+        # Handle assigned_to field using new Assignment model for multiple recruiters
+        from app.models.assignment import Assignment
+        
         old_recruiters = set()
-        if requirement.user_id:
-            old_user = get_db_session().query(User).filter_by(user_id=requirement.user_id).first()
-            if old_user:
-                old_recruiters = set([old_user.username])
+        # Get existing assignments
+        existing_assignments = Assignment.get_active_assignments_for_requirement(requirement.requirement_id)
+        for assignment in existing_assignments:
+            if assignment.user and assignment.user.username:
+                old_recruiters.add(assignment.user.username)
+        
         new_recruiters = set()
         
         if 'assigned_to' in data:
+            recruiter_usernames = []
             if isinstance(data['assigned_to'], list):
-                # If it's a list of recruiters, take the first one
-                if data['assigned_to']:
-                    # Get the first recruiter from the list
-                    first_recruiter = data['assigned_to'][0]
-                    user = get_db_session().query(User).filter_by(username=first_recruiter).first()
-                    if user:
-                        # Only allow assignment to recruiters, not admins
-                        if user.role.value != 'recruiter':
-                            return jsonify({'error': 'Only recruiters can be assigned to requirements. Admins cannot be assigned.'}), 400
-                        requirement.user_id = user.user_id
-                        new_recruiters = set([user.username])
+                recruiter_usernames = data['assigned_to']
             else:
-                # If it's a single recruiter or string, set it directly
-                if data['assigned_to']:
-                    user = get_db_session().query(User).filter_by(username=data['assigned_to']).first()
+                recruiter_usernames = [data['assigned_to']]
+            
+            # Validate all recruiters and get their user_ids
+            recruiter_user_ids = []
+            for username in recruiter_usernames:
+                if username:  # Skip empty usernames
+                    user = get_db_session().query(User).filter_by(username=username).first()
                     if user:
                         # Only allow assignment to recruiters, not admins
                         if user.role.value != 'recruiter':
-                            return jsonify({'error': 'Only recruiters can be assigned to requirements. Admins cannot be assigned.'}), 400
-                        requirement.user_id = user.user_id
-                        new_recruiters = set([user.username])
+                            return jsonify({'error': f'Only recruiters can be assigned to requirements. {username} is not a recruiter.'}), 400
+                        recruiter_user_ids.append(user.user_id)
+                        new_recruiters.add(user.username)
+            
+            # Deactivate all existing assignments first
+            for assignment in existing_assignments:
+                assignment.deactivate()
+            
+            # Assign new recruiters using the Assignment model
+            if recruiter_user_ids:
+                assigned_by_user_id = current_user.user_id if current_user else None
+                Assignment.assign_recruiters_to_requirement(
+                    requirement_id=requirement.requirement_id,
+                    recruiter_user_ids=recruiter_user_ids,
+                    assigned_by=assigned_by_user_id
+                )
+                
+                # For backward compatibility, set the primary recruiter (first one) on requirement
+                requirement.user_id = recruiter_user_ids[0]
+            else:
+                # If no recruiters assigned, clear the requirement's user_id
+                requirement.user_id = None
         
         # Create notifications and send emails for newly assigned recruiters
         newly_assigned = new_recruiters - old_recruiters
@@ -1713,7 +1735,7 @@ def get_profiles_count():
             
             # Add assignment information that frontend expects
             req_dict['assigned_to'] = _get_assigned_user_display(req.user_id)
-            req_dict['assigned_recruiters'] = _get_assigned_recruiters_display(req.user_id)
+            req_dict['assigned_recruiters'] = _get_assigned_recruiters_display(req.requirement_id)
             
             # Check if this is a new assignment (updated within 24 hours and current user is assigned)
             is_new_assignment = False

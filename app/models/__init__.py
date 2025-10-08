@@ -17,10 +17,11 @@ from .meeting import Meeting
 from .sla_config import SLAConfig
 from .sla_tracker import SLATracker
 from .notification import Notification
+from .assignment import Assignment
 
 __all__ = [
     'Requirement', 'Profile', 'User', 'Skills', 'EmailDetails', 'ProfileRecords',
     'Screening', 'InterviewScheduled', 'InterviewRoundOne', 'InterviewRoundTwo',
     'Offer', 'Onboarding', 'Api', 'SystemSettings', 'Meeting', 'SLAConfig', 
-    'SLATracker', 'Notification'
+    'SLATracker', 'Notification', 'Assignment'
 ]
