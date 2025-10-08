@@ -74,13 +74,27 @@ def _get_assigned_recruiters_for_requirement(requirement_id):
     """Get the list of assigned recruiters for a requirement using Assignment model"""
     try:
         from app.models.assignment import Assignment
+        from app.models.user import User
+        from flask import g
         
-        assignments = Assignment.get_active_assignments_for_requirement(requirement_id)
+        # Use domain-specific session if available, otherwise fall back to global session
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            session = g.db_session
+        else:
+            session = db.session
+        
+        assignments = session.query(Assignment).filter_by(
+            requirement_id=requirement_id,
+            is_active=True
+        ).all()
+        
         recruiters = []
         
         for assignment in assignments:
-            if assignment.user and assignment.user.role.value == 'recruiter':
-                recruiters.append(assignment.user.username)
+            # Get user from the same session
+            user = session.query(User).filter_by(user_id=assignment.user_id).first()
+            if user and user.role.value == 'recruiter':
+                recruiters.append(user.username)
         
         return recruiters
     except Exception as e:
