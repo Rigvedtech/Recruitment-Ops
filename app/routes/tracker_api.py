@@ -11,6 +11,7 @@ import re
 from sqlalchemy import func
 from app.services.email_processor import EmailProcessor
 from app.middleware.domain_auth import require_domain_auth
+from app.middleware.redis_performance_middleware import cache_response, invalidate_cache_pattern
 
 def get_db_session():
     """
@@ -75,12 +76,16 @@ def _get_assigned_user_display(user_id):
     else:
         return None  # This will be treated as unassigned
 
-def _get_assigned_recruiters_display(requirement_id):
+def _get_assigned_recruiters_display(requirement_id, session=None):
     """Get the list of assigned recruiters for a requirement, excluding admins"""
     try:
         from app.models.assignment import Assignment
         
-        assignments = Assignment.get_active_assignments_for_requirement(requirement_id)
+        # Use provided session or fall back to get_db_session()
+        if session is None:
+            session = get_db_session()
+        
+        assignments = Assignment.get_active_assignments_for_requirement(requirement_id, session=session)
         recruiters = []
         
         for assignment in assignments:
@@ -303,6 +308,7 @@ def _categorize_content(email_subject, email_body):
 
 @tracker_bp.route('', methods=['GET'])
 @require_domain_auth
+@cache_response(ttl=300)  # Cache for 5 minutes
 def get_tracker_requirements():
     """Get all RFH requirements with request IDs for the tracker, grouped by thread_id or normalized subject for status."""
     try:
@@ -487,7 +493,7 @@ def get_tracker_requirements():
                     'received_datetime': received_datetime.isoformat() if received_datetime else None,
                     'status': primary_req.status.value if primary_req.status else None,
                     'assigned_to': _get_assigned_user_display(primary_req.user_id),
-                    'assigned_recruiters': _get_assigned_recruiters_display(primary_req.requirement_id),
+                    'assigned_recruiters': _get_assigned_recruiters_display(primary_req.requirement_id, session=get_db_session()),
                     'notes': primary_req.notes,
                     'created_at': primary_req.created_at.isoformat() if primary_req.created_at else None,
                     'updated_at': primary_req.updated_at.isoformat() if primary_req.updated_at else None,
@@ -574,7 +580,7 @@ def get_tracker_requirements():
                     'received_datetime': received_datetime.isoformat() if received_datetime else None,
                     'status': req.status.value if req.status else None,
                     'assigned_to': _get_assigned_user_display(req.user_id),
-                    'assigned_recruiters': _get_assigned_recruiters_display(req.requirement_id),
+                    'assigned_recruiters': _get_assigned_recruiters_display(req.requirement_id, session=get_db_session()),
                     'notes': req.notes,
                     'created_at': req.created_at.isoformat() if req.created_at else None,
                     'updated_at': req.updated_at.isoformat() if req.updated_at else None,
@@ -623,6 +629,7 @@ def get_tracker_requirements():
 
 @tracker_bp.route('/<string:request_id>', methods=['GET'])
 @require_domain_auth
+@cache_response(ttl=600)  # Cache for 10 minutes
 def get_tracker_requirement(request_id):
     """Get a specific tracker requirement by request_id"""
     try:
@@ -789,8 +796,8 @@ def update_tracker_requirement(request_id):
         from app.models.assignment import Assignment
         
         old_recruiters = set()
-        # Get existing assignments
-        existing_assignments = Assignment.get_active_assignments_for_requirement(requirement.requirement_id)
+        # Get existing assignments (pass domain-aware session)
+        existing_assignments = Assignment.get_active_assignments_for_requirement(requirement.requirement_id, session=get_db_session())
         for assignment in existing_assignments:
             if assignment.user and assignment.user.username:
                 old_recruiters.add(assignment.user.username)
@@ -820,13 +827,14 @@ def update_tracker_requirement(request_id):
             for assignment in existing_assignments:
                 assignment.deactivate()
             
-            # Assign new recruiters using the Assignment model
+            # Assign new recruiters using the Assignment model (pass domain-aware session)
             if recruiter_user_ids:
                 assigned_by_user_id = current_user.user_id if current_user else None
                 Assignment.assign_recruiters_to_requirement(
                     requirement_id=requirement.requirement_id,
                     recruiter_user_ids=recruiter_user_ids,
-                    assigned_by=assigned_by_user_id
+                    assigned_by=assigned_by_user_id,
+                    session=get_db_session()
                 )
                 
                 # For backward compatibility, set the primary recruiter (first one) on requirement
@@ -1735,7 +1743,7 @@ def get_profiles_count():
             
             # Add assignment information that frontend expects
             req_dict['assigned_to'] = _get_assigned_user_display(req.user_id)
-            req_dict['assigned_recruiters'] = _get_assigned_recruiters_display(req.requirement_id)
+            req_dict['assigned_recruiters'] = _get_assigned_recruiters_display(req.requirement_id, session=get_db_session())
             
             # Check if this is a new assignment (updated within 24 hours and current user is assigned)
             is_new_assignment = False
@@ -2172,8 +2180,8 @@ def move_profile():
                 return jsonify({'success': False, 'error': 'One or both requirements not found'}), 404
             
             # Check if recruiter is assigned to both requirements
-            from_assigned = from_requirement.is_assigned_to(current_user.username)
-            to_assigned = to_requirement.is_assigned_to(current_user.username)
+            from_assigned = from_requirement.is_assigned_to(current_user.username, session=get_db_session())
+            to_assigned = to_requirement.is_assigned_to(current_user.username, session=get_db_session())
             
             if not from_assigned and not to_assigned:
                 return jsonify({'success': False, 'error': 'You do not have permission to move profiles between these requirements'}), 403
@@ -2327,8 +2335,8 @@ def can_move_profile(profile_id, request_id):
             if current_user and current_user.role.value == 'recruiter':
                 target_requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
                 if target_requirement:
-                    from_assigned = current_requirement.is_assigned_to(current_user.username)
-                    to_assigned = target_requirement.is_assigned_to(current_user.username)
+                    from_assigned = current_requirement.is_assigned_to(current_user.username, session=get_db_session())
+                    to_assigned = target_requirement.is_assigned_to(current_user.username, session=get_db_session())
                     
                     if not from_assigned and not to_assigned:
                         return jsonify({

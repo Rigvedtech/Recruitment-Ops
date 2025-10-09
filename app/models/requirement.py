@@ -179,6 +179,29 @@ class Requirement(db.Model):
         else:
             return f"{hours} hours"
     
+    def is_assigned_to(self, username, session=None):
+        """Check if a user (by username) is assigned to this requirement"""
+        from app.models.assignment import Assignment
+        from app.models.user import User
+        
+        # Use provided session or fall back to default
+        if session is None:
+            session = db.session
+        
+        # First, get the user by username
+        user = session.query(User).filter_by(username=username).first()
+        if not user:
+            return False
+        
+        # Check if there's an active assignment for this user and requirement
+        assignment = session.query(Assignment).filter_by(
+            requirement_id=self.requirement_id,
+            user_id=user.user_id,
+            is_active=True
+        ).first()
+        
+        return assignment is not None
+    
     def to_dict(self):
         return {
             'requirement_id': str(self.requirement_id) if self.requirement_id else None,

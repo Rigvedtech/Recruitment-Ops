@@ -49,29 +49,36 @@ class Assignment(db.Model):
         self.last_activity_at = datetime.utcnow()
     
     @classmethod
-    def get_active_assignments_for_requirement(cls, requirement_id):
+    def get_active_assignments_for_requirement(cls, requirement_id, session=None):
         """Get all active assignments for a requirement"""
-        return cls.query.filter_by(
+        if session is None:
+            session = db.session
+        return session.query(cls).filter_by(
             requirement_id=requirement_id,
             is_active=True
         ).all()
     
     @classmethod
-    def get_active_assignments_for_user(cls, user_id):
+    def get_active_assignments_for_user(cls, user_id, session=None):
         """Get all active assignments for a user"""
-        return cls.query.filter_by(
+        if session is None:
+            session = db.session
+        return session.query(cls).filter_by(
             user_id=user_id,
             is_active=True
         ).all()
     
     @classmethod
-    def assign_recruiters_to_requirement(cls, requirement_id, recruiter_user_ids, assigned_by=None):
+    def assign_recruiters_to_requirement(cls, requirement_id, recruiter_user_ids, assigned_by=None, session=None):
         """Assign multiple recruiters to a requirement"""
+        if session is None:
+            session = db.session
+            
         assignments = []
         
         for user_id in recruiter_user_ids:
             # Check if assignment already exists
-            existing = cls.query.filter_by(
+            existing = session.query(cls).filter_by(
                 requirement_id=requirement_id,
                 user_id=user_id
             ).first()
@@ -95,15 +102,18 @@ class Assignment(db.Model):
                     assigned_by=assigned_by,
                     is_active=True
                 )
-                db.session.add(assignment)
+                session.add(assignment)
                 assignments.append(assignment)
         
         return assignments
     
     @classmethod
-    def deactivate_user_assignment(cls, requirement_id, user_id):
+    def deactivate_user_assignment(cls, requirement_id, user_id, session=None):
         """Deactivate a specific user's assignment to a requirement"""
-        assignment = cls.query.filter_by(
+        if session is None:
+            session = db.session
+            
+        assignment = session.query(cls).filter_by(
             requirement_id=requirement_id,
             user_id=user_id,
             is_active=True
