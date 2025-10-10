@@ -4,6 +4,7 @@ from app.services.notification_service import NotificationService
 from app.models.user import User
 from app.models.notification import Notification
 from app.database import db
+from app.middleware.domain_auth import require_domain_auth
 
 def get_db_session():
     """
@@ -60,6 +61,7 @@ def get_user_by_legacy_id(user_id):
     return None
 
 @notification_bp.route('', methods=['GET'])
+@require_domain_auth
 def get_user_notifications():
     """Get notifications for the current user"""
     try:
@@ -99,6 +101,7 @@ def get_user_notifications():
         return jsonify({'error': 'Failed to get notifications'}), 500
 
 @notification_bp.route('/unread-count', methods=['GET'])
+@require_domain_auth
 def get_unread_count():
     """Get count of unread notifications for the current user"""
     try:
@@ -124,6 +127,7 @@ def get_unread_count():
         return jsonify({'error': 'Failed to get unread count'}), 500
 
 @notification_bp.route('/<notification_id>/read', methods=['POST'])
+@require_domain_auth
 def mark_notification_read(notification_id):
     """Mark a specific notification as read"""
     try:
@@ -154,6 +158,7 @@ def mark_notification_read(notification_id):
         return jsonify({'error': 'Failed to mark notification as read'}), 500
 
 @notification_bp.route('/mark-all-read', methods=['POST'])
+@require_domain_auth
 def mark_all_notifications_read():
     """Mark all notifications as read for the current user"""
     try:
@@ -184,6 +189,7 @@ def mark_all_notifications_read():
         return jsonify({'error': 'Failed to mark all notifications as read'}), 500
 
 @notification_bp.route('/cleanup', methods=['POST'])
+@require_domain_auth
 def cleanup_expired_notifications():
     """Clean up expired notifications (admin only)"""
     try:
@@ -214,6 +220,7 @@ def cleanup_expired_notifications():
         return jsonify({'error': 'Failed to cleanup notifications'}), 500
 
 @notification_bp.route('/test', methods=['POST'])
+@require_domain_auth
 def create_test_notification():
     """Create a test notification (admin only)"""
     try:
@@ -263,6 +270,7 @@ def create_test_notification():
         return jsonify({'error': 'Failed to create test notification'}), 500
 
 @notification_bp.route('/sla-alerts', methods=['POST'])
+@require_domain_auth
 def trigger_sla_notifications():
     """Trigger SLA breach notifications (admin only)"""
     try:
@@ -295,6 +303,7 @@ def trigger_sla_notifications():
         return jsonify({'error': 'Failed to trigger SLA notifications'}), 500
 
 @notification_bp.route('/admin/all', methods=['GET'])
+@require_domain_auth
 def get_all_notifications_admin():
     """Get all notifications for admin dashboard"""
     try:

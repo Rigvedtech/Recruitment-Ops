@@ -120,7 +120,7 @@ class NotificationService:
             get_db_session().add(notification)
             get_db_session().commit()
             
-            current_app.logger.info(f"Created notification {notification.id} for user {user_id}: {notification_type}")
+            current_app.logger.info(f"Created notification {notification.notification_id} for user {user_id}: {notification_type}")
             return notification
             
         except Exception as e:
@@ -175,7 +175,7 @@ class NotificationService:
             get_db_session().add(notification)
             get_db_session().commit()
             
-            current_app.logger.info(f"Created notification {notification.id} for user {user.username}: sla_breach")
+            current_app.logger.info(f"Created notification {notification.notification_id} for user {user.username}: sla_breach")
             return notification
             
         except Exception as e:
@@ -226,7 +226,7 @@ class NotificationService:
             get_db_session().add(notification)
             get_db_session().commit()
             
-            current_app.logger.info(f"Created notification {notification.id} for user {user.username}: new_assignment")
+            current_app.logger.info(f"Created notification {notification.notification_id} for user {user.username}: new_assignment")
             return notification
             
         except Exception as e:
@@ -355,7 +355,7 @@ class NotificationService:
             if isinstance(user_id, int):
                 users = get_db_session().query(User).all()
                 if 1 <= user_id <= len(users):
-                    actual_user_id = users[user_id - 1].id
+                    actual_user_id = users[user_id - 1].user_id
                 else:
                     return []
             else:
@@ -375,7 +375,7 @@ class NotificationService:
             if isinstance(user_id, int):
                 users = get_db_session().query(User).all()
                 if 1 <= user_id <= len(users):
-                    actual_user_id = users[user_id - 1].id
+                    actual_user_id = users[user_id - 1].user_id
                 else:
                     return 0
             else:
@@ -393,7 +393,7 @@ class NotificationService:
             # Get the user (handle both legacy integer and UUID user_id)
             from app.models.user import User
             if isinstance(user_id, str) and len(user_id) == 36:
-                user = get_db_session().query(User).filter_by(id=user_id).first()
+                user = get_db_session().query(User).filter_by(user_id=user_id).first()
             else:
                 # Legacy integer lookup
                 users = get_db_session().query(User).all()
@@ -404,11 +404,11 @@ class NotificationService:
             
             if user and user.role == 'admin':
                 # Admin can mark any notification as read
-                notification = get_db_session().query(Notification).filter_by(id=notification_id).first()
+                notification = get_db_session().query(Notification).filter_by(notification_id=notification_id).first()
             else:
                 # Regular users can only mark their own notifications as read
                 notification = get_db_session().query(Notification).filter_by(
-                    id=notification_id,
+                    notification_id=notification_id,
                     user_id=user_id
                 ).first()
             
@@ -433,7 +433,7 @@ class NotificationService:
             # Get the user (handle both legacy integer and UUID user_id)
             from app.models.user import User
             if isinstance(user_id, str) and len(user_id) == 36:
-                user = get_db_session().query(User).filter_by(id=user_id).first()
+                user = get_db_session().query(User).filter_by(user_id=user_id).first()
             else:
                 # Legacy integer lookup
                 users = get_db_session().query(User).all()
@@ -477,7 +477,7 @@ class NotificationService:
             
             for admin in admin_users:
                 notification = NotificationService.create_notification(
-                    user_id=admin.id,
+                    user_id=admin.user_id,
                     notification_type=notification_type,
                     title=title,
                     message=message,
