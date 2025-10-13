@@ -880,18 +880,12 @@ def update_tracker_requirement(request_id):
         # Auto-start SLA tracking for workflow steps based on status change
         try:
             from app.services.sla_service import SLAService
+            # Get the username for the assigned user (if any) - only fetch username
             assigned_recruiter = None
-            if requirement.user_id:
-                # Get the user assigned to this requirement
-                user = get_db_session().query(User).filter_by(user_id=requirement.user_id).first()
-                assigned_recruiter = user.username if user else None
-            
-            # Get user_id for the assigned recruiter
             user_id = None
-            if assigned_recruiter:
-                user = get_db_session().query(User).filter_by(username=assigned_recruiter).first()
-                if user:
-                    user_id = str(user.user_id)
+            if requirement.user_id:
+                assigned_recruiter = get_db_session().query(User.username).filter_by(user_id=requirement.user_id).scalar()
+                user_id = str(requirement.user_id)
             
             started_trackers = SLAService.auto_start_workflow_steps(
                 requirement_id=str(requirement.requirement_id),

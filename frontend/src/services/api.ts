@@ -50,7 +50,9 @@ const getAuthHeaders = () => {
         if (user) {
             try {
                 const userData = JSON.parse(user);
-                headers['Authorization'] = `Bearer ${userData.username}`;
+                // Use access_token (JWT) if available, fallback to username for backwards compatibility
+                const token = localStorage.getItem('access_token');
+                headers['Authorization'] = `Bearer ${token || userData.access_token || userData.username}`;
             } catch (e) {
                 console.error('Error parsing user data:', e);
             }

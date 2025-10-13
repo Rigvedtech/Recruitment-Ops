@@ -37,8 +37,11 @@ const RecruiterLogin: React.FC = () => {
       const response = await recruiterLogin(formData.username, formData.password);
 
       if (response.status === 'success') {
-        // Store user data in localStorage (use same key as main login for consistency)
+        // Store user data and JWT token in localStorage
         localStorage.setItem('user', JSON.stringify(response.user));
+        if (response.access_token) {
+          localStorage.setItem('access_token', response.access_token);
+        }
         
         // Dispatch custom event to notify NavigationWrapper
         window.dispatchEvent(new Event('userStateChanged'));

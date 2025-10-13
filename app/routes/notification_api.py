@@ -52,10 +52,9 @@ notification_bp = Blueprint('notifications', __name__, url_prefix='/api/notifica
 def get_user_by_legacy_id(user_id):
     """Helper function to get user by legacy integer ID (for UUID migration compatibility)"""
     try:
-        # For backward compatibility, map integer user_id to actual users
-        users = get_db_session().query(User).all()
-        if 1 <= user_id <= len(users):
-            return users[user_id - 1]  # Simple index-based lookup
+        # For backward compatibility, get the nth user without fetching all users
+        if user_id >= 1:
+            return get_db_session().query(User).offset(user_id - 1).limit(1).first()
     except:
         pass
     return None
@@ -70,9 +69,9 @@ def get_user_notifications():
         if not user_id or user_id == 'undefined' or user_id == 'null':
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists
-        user = get_db_session().query(User).filter_by(user_id=user_id).first()
-        if not user:
+        # Validate user exists - only fetch user_id
+        actual_user_id = get_db_session().query(User.user_id).filter_by(user_id=user_id).scalar()
+        if not actual_user_id:
             return jsonify({'error': 'User not found'}), 404
         
         # Get query parameters
@@ -81,13 +80,13 @@ def get_user_notifications():
         
         # Get notifications
         notifications = NotificationService.get_user_notifications(
-            user_id=user.user_id,  # Use actual user ID, not the parameter
+            user_id=actual_user_id,  # Use actual user ID, not the parameter
             include_read=include_read,
             limit=limit
         )
 
         # Get unread count
-        unread_count = NotificationService.get_unread_count(user.user_id)
+        unread_count = NotificationService.get_unread_count(actual_user_id)
         
         return jsonify({
             'success': True,
@@ -110,12 +109,12 @@ def get_unread_count():
         if not user_id or user_id == 'undefined' or user_id == 'null':
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists
-        user = get_db_session().query(User).filter_by(user_id=user_id).first()
-        if not user:
+        # Validate user exists - only fetch user_id
+        actual_user_id = get_db_session().query(User.user_id).filter_by(user_id=user_id).scalar()
+        if not actual_user_id:
             return jsonify({'error': 'User not found'}), 404
 
-        unread_count = NotificationService.get_unread_count(user.user_id)
+        unread_count = NotificationService.get_unread_count(actual_user_id)
         
         return jsonify({
             'success': True,
@@ -138,12 +137,12 @@ def mark_notification_read(notification_id):
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists
-        user = get_db_session().query(User).filter_by(user_id=user_id).first()
-        if not user:
+        # Validate user exists - only fetch user_id
+        actual_user_id = get_db_session().query(User.user_id).filter_by(user_id=user_id).scalar()
+        if not actual_user_id:
             return jsonify({'error': 'User not found'}), 404
 
-        success = NotificationService.mark_notification_as_read(notification_id, user.user_id)
+        success = NotificationService.mark_notification_as_read(notification_id, actual_user_id)
         
         if success:
             return jsonify({
@@ -169,12 +168,12 @@ def mark_all_notifications_read():
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists
-        user = get_db_session().query(User).filter_by(user_id=user_id).first()
-        if not user:
+        # Validate user exists - only fetch user_id
+        actual_user_id = get_db_session().query(User.user_id).filter_by(user_id=user_id).scalar()
+        if not actual_user_id:
             return jsonify({'error': 'User not found'}), 404
 
-        success = NotificationService.mark_all_as_read(user.user_id)
+        success = NotificationService.mark_all_as_read(actual_user_id)
         
         if success:
             return jsonify({
@@ -200,12 +199,13 @@ def cleanup_expired_notifications():
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists and is admin
-        user = get_db_session().query(User).filter_by(user_id=user_id).first()
-        if not user:
+        # Validate user exists and is admin - only fetch user_id and role
+        result = get_db_session().query(User.user_id, User.role).filter_by(user_id=user_id).first()
+        if not result:
             return jsonify({'error': 'User not found'}), 404
 
-        if user.role.value != 'admin':
+        actual_user_id, user_role = result
+        if user_role.value != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
         
         count = NotificationService.cleanup_expired_notifications()
@@ -238,22 +238,24 @@ def create_test_notification():
         if not admin_user_id or not target_user_id:
             return jsonify({'error': 'admin_user_id and target_user_id are required'}), 400
         
-        # Validate admin user
-        admin_user = get_db_session().query(User).filter_by(user_id=admin_user_id).first()
-        if not admin_user or admin_user.role.value != 'admin':
+        # Validate admin user - only fetch user_id, role and username
+        admin_result = get_db_session().query(User.user_id, User.role, User.username).filter_by(user_id=admin_user_id).first()
+        if not admin_result or admin_result[1].value != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
+        
+        admin_actual_id, admin_role, admin_username = admin_result
 
-        # Validate target user
-        target_user = get_db_session().query(User).filter_by(user_id=target_user_id).first()
-        if not target_user:
+        # Validate target user - only fetch user_id
+        target_user_id_actual = get_db_session().query(User.user_id).filter_by(user_id=target_user_id).scalar()
+        if not target_user_id_actual:
             return jsonify({'error': 'Target user not found'}), 404
 
         notification = NotificationService.create_notification(
-            user_id=target_user.user_id,
+            user_id=target_user_id_actual,
             notification_type=notification_type,
             title=title,
             message=message,
-            data={'test': True, 'created_by': admin_user.username}
+            data={'test': True, 'created_by': admin_username}
         )
         
         if notification:
@@ -280,12 +282,13 @@ def trigger_sla_notifications():
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists and is admin
-        user = get_db_session().query(User).filter_by(user_id=user_id).first()
-        if not user:
+        # Validate user exists and is admin - only fetch user_id and role
+        result = get_db_session().query(User.user_id, User.role).filter_by(user_id=user_id).first()
+        if not result:
             return jsonify({'error': 'User not found'}), 404
 
-        if user.role.value != 'admin':
+        actual_user_id, user_role = result
+        if user_role.value != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
         
         # Get SLA alerts and create notifications
@@ -312,12 +315,13 @@ def get_all_notifications_admin():
         if not user_id or user_id == 'undefined' or user_id == 'null':
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists and is admin (now works with UUID)
-        user = get_db_session().query(User).filter_by(user_id=user_id).first()
-        if not user:
+        # Validate user exists and is admin (now works with UUID) - only fetch user_id and role
+        result = get_db_session().query(User.user_id, User.role).filter_by(user_id=user_id).first()
+        if not result:
             return jsonify({'error': 'User not found'}), 404
 
-        if user.role.value != 'admin':
+        actual_user_id, user_role = result
+        if user_role.value != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
         
         # Get query parameters

@@ -85,9 +85,23 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
     try {
       setLoading(true);
       
+      // Get authentication headers
+      const token = localStorage.getItem('access_token');
+      const domain = window.location.host;
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'X-Original-Domain': domain,
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       if (user.role === 'admin') {
         // Admin sees all notifications from all users
-        const response = await fetch(`${getApiBaseUrl()}/notifications/admin/all?user_id=${user.user_id}&limit=50`);
+        const response = await fetch(`${getApiBaseUrl()}/notifications/admin/all?user_id=${user.user_id}&limit=50`, {
+          headers
+        });
         
         if (response.ok) {
           const data = await response.json();
@@ -111,7 +125,9 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
         }
       } else {
         // Regular user sees only their notifications
-        const response = await fetch(`${getApiBaseUrl()}/notifications?user_id=${user.user_id}&limit=10`);
+        const response = await fetch(`${getApiBaseUrl()}/notifications?user_id=${user.user_id}&limit=10`, {
+          headers
+        });
         
         if (response.ok) {
           const data = await response.json();
@@ -139,9 +155,23 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
     }
 
     try {
+      // Get authentication headers
+      const token = localStorage.getItem('access_token');
+      const domain = window.location.host;
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'X-Original-Domain': domain,
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       if (user.role === 'admin') {
         // Admin needs to get unread count from all users
-        const response = await fetch(`${getApiBaseUrl()}/notifications/admin/all?user_id=${user.user_id}&limit=1`);
+        const response = await fetch(`${getApiBaseUrl()}/notifications/admin/all?user_id=${user.user_id}&limit=1`, {
+          headers
+        });
         
         if (response.ok) {
           const data = await response.json();
@@ -156,7 +186,9 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
         }
       } else {
         // Regular user unread count
-        const response = await fetch(`${getApiBaseUrl()}/notifications/unread-count?user_id=${user.user_id}`);
+          const response = await fetch(`${getApiBaseUrl()}/notifications/unread-count?user_id=${user.user_id}`, {
+          headers
+        });
         
         if (response.ok) {
           const data = await response.json();
@@ -181,10 +213,15 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
     }
 
     try {
+      const token = localStorage.getItem('access_token');
+      const domain = window.location.host;
+      
       const response = await fetch(`${getApiBaseUrl()}/notifications/${notificationId}/read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Original-Domain': domain,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
         },
         body: JSON.stringify({ user_id: user.user_id }),
       });
@@ -216,10 +253,15 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
     }
 
     try {
+      const token = localStorage.getItem('access_token');
+      const domain = window.location.host;
+      
       const response = await fetch(`${getApiBaseUrl()}/notifications/mark-all-read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Original-Domain': domain,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
         },
         body: JSON.stringify({ user_id: user.user_id }),
       });

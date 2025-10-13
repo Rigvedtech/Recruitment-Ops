@@ -13,6 +13,7 @@ from app.models.meeting import Meeting
 from app.middleware.auth import require_admin
 from app.middleware.domain_auth import require_domain_auth, require_jwt_domain_auth, ensure_domain_isolation
 from app.services.database_manager import database_manager
+from app.middleware.redis_performance_middleware import cache_response, cache_database_query, invalidate_cache_pattern
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 import os
 from datetime import datetime, timedelta
@@ -91,10 +92,10 @@ def _get_assigned_recruiters_for_requirement(requirement_id):
         recruiters = []
         
         for assignment in assignments:
-            # Get user from the same session
-            user = session.query(User).filter_by(user_id=assignment.user_id).first()
-            if user and user.role.value == 'recruiter':
-                recruiters.append(user.username)
+            # Get only username and role from the same session
+            result = session.query(User.username, User.role).filter_by(user_id=assignment.user_id).first()
+            if result and result[1].value == 'recruiter':
+                recruiters.append(result[0])
         
         return recruiters
     except Exception as e:
@@ -640,6 +641,7 @@ def get_requirement_by_id(request_id):
 
 @api_bp.route('/profiles', methods=['GET'])
 @require_domain_auth
+@cache_response(ttl=300)  # Cache for 5 minutes
 def get_profiles():
     """Get all candidate profiles with optional search and filtering"""
     try:
@@ -730,6 +732,7 @@ def get_profile(student_id):
         return jsonify({'error': f'Failed to fetch profile {student_id}'}), 500
 
 @api_bp.route('/profiles/<string:student_id>', methods=['DELETE'])
+@invalidate_cache_pattern('api_cache:*profiles*')  # Invalidate all profile caches when deleted
 def delete_profile(student_id):
     """Soft delete a profile by student_id"""
     try:
@@ -818,6 +821,7 @@ def export_data():
 
 @api_bp.route('/requirements', methods=['GET'])
 @require_domain_auth
+@cache_response(ttl=300)  # Cache for 5 minutes
 def get_requirements():
     """Get all job requirements (excluding reply/forward emails)"""
     try:
@@ -888,7 +892,7 @@ def get_requirements():
                 'priority': format_enum_for_display(r.priority),
                 'tentative_doj': r.tentative_doj.isoformat() if r.tentative_doj else None,
                 'additional_remarks': r.additional_remarks,
-                'assigned_to': get_db_session().query(User).filter_by(user_id=r.user_id).first().username if r.user_id else None,
+                'assigned_to': get_db_session().query(User.username).filter_by(user_id=r.user_id).scalar() if r.user_id else None,
                 'assigned_recruiters': _get_assigned_recruiters_for_requirement(r.requirement_id),
                 'is_manual_requirement': r.is_manual_requirement,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
@@ -1001,6 +1005,7 @@ def check_requirement_duplicate():
         return jsonify({'error': 'Failed to check for duplicates'}), 500
 
 @api_bp.route('/requirements', methods=['POST'])
+@invalidate_cache_pattern('api_cache:*requirements*')  # Invalidate all requirement caches when created
 def create_requirement():
     """Create a new requirement manually"""
     try:
@@ -1600,6 +1605,7 @@ def update_requirement_jd():
 
 
 @api_bp.route('/upload-profiles', methods=['POST'])
+@invalidate_cache_pattern('api_cache:*profiles*')  # Invalidate all profile caches when bulk uploaded
 def upload_profiles():
     """Upload candidate profiles from file"""
     try:
@@ -2088,6 +2094,7 @@ def verify_otp():
 
 @api_bp.route('/users', methods=['GET'])
 @require_domain_auth
+@cache_response(ttl=600)  # Cache for 10 minutes - users don't change frequently
 def get_users():
     """Get all users (admin only)"""
     try:
@@ -2302,6 +2309,7 @@ def send_profiles_email(request_id):
         current_app.logger.error(f"Error sending profiles email for request {request_id}: {str(e)}")
         return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
 @api_bp.route('/profiles/<string:student_id>', methods=['PUT'])
+@invalidate_cache_pattern('api_cache:*profiles*')  # Invalidate all profile caches when updated
 def update_profile(student_id):
     """Update a profile by student_id"""
     try:
@@ -3266,9 +3274,8 @@ def get_recruiter_activity():
             end_date = datetime.now().date()
             start_date = end_date - timedelta(days=days-1)
         
-        # Get all recruiters
-        recruiters = get_db_session().query(User).filter_by(role='recruiter').all()
-        recruiter_usernames = [r.username for r in recruiters]
+        # Get all recruiters - only fetch username
+        recruiter_usernames = [r[0] for r in get_db_session().query(User.username).filter_by(role='recruiter').all()]
         
         # Get daily activity data
         daily_activity = []
@@ -3296,10 +3303,10 @@ def get_recruiter_activity():
             requirement_recruiters = {}
             for req in all_requirements:
                 if req.user_id:
-                    # Get the user (recruiter) assigned to this requirement
-                    user = get_db_session().query(User).filter_by(user_id=req.user_id).first()
-                    if user:
-                        requirement_recruiters[str(req.requirement_id)] = [user.username]
+                    # Get the user (recruiter) assigned to this requirement - only fetch username
+                    username = get_db_session().query(User.username).filter_by(user_id=req.user_id).scalar()
+                    if username:
+                        requirement_recruiters[str(req.requirement_id)] = [username]
             
             # Create a mapping of profile_id to requirement_id using the new schema
             profile_to_requirement = {}

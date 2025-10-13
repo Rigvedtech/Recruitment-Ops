@@ -9,13 +9,17 @@ from app.routes.main import main_bp
 from app.routes.tracker_api import tracker_bp
 from app.routes.sla_api import sla_bp
 from app.routes.workflow_api import workflow_bp
+from app.routes.reports_api import reports_bp
 from app.routes.notification_api import notification_bp
 from app.routes.domain_resolver_api import domain_resolver_api_bp
 from app.routes.domain_test_api import domain_test_bp
+from app.routes.redis_health_api import redis_health_bp
 from app.database import init_db, db
 from app.services.sla_service import SLAService
 from app.middleware.domain_db_resolver import domain_db_resolver
 from app.services.database_manager import database_manager
+from app.services.redis_service import redis_service
+from app.services.redis_domain_cache_service import enhanced_domain_cache_service
 from config import Config
 
 # Initialize APScheduler
@@ -51,6 +55,12 @@ def create_app(config_name='default'):
     # Initialize JWT Manager
     jwt.init_app(app)
 
+    # Initialize Redis service
+    redis_service.init_app(app)
+    
+    # Reinitialize enhanced domain cache service after Redis is initialized
+    enhanced_domain_cache_service.reinitialize_redis_connection()
+    
     # Initialize domain database resolver middleware (BEFORE database init)
     domain_db_resolver.init_app(app)
     
@@ -93,9 +103,11 @@ def create_app(config_name='default'):
     app.register_blueprint(tracker_bp)  # Register tracker routes
     app.register_blueprint(sla_bp)   # Register SLA routes
     app.register_blueprint(workflow_bp)  # Register workflow routes
+    app.register_blueprint(reports_bp)  # Register reports routes
     app.register_blueprint(notification_bp)  # Register notification routes
     app.register_blueprint(domain_resolver_api_bp)  # Register domain resolver API routes
     app.register_blueprint(domain_test_bp)  # Register domain test API routes
+    app.register_blueprint(redis_health_bp)  # Register Redis health API routes
 
     # Configure and start APScheduler
     app.config['SCHEDULER_API_ENABLED'] = False  # Disable built-in API routes to avoid conflicts
@@ -212,5 +224,6 @@ def create_app_for_job():
     app.register_blueprint(sla_bp)   # Register SLA routes
     app.register_blueprint(workflow_bp)  # Register workflow routes
     app.register_blueprint(notification_bp)  # Register notification routes
+    app.register_blueprint(reports_bp)  # Register reports routes
 
     return app 

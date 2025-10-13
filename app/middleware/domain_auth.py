@@ -1,7 +1,7 @@
 import logging
 from functools import wraps
 from flask import request, jsonify, current_app, g
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, decode_token
 from app.services.database_manager import database_manager
 from app.models.user import User
 
@@ -44,14 +44,16 @@ def require_domain_auth(f):
             # Get user from request headers
             auth_header = request.headers.get('Authorization')
             if not auth_header:
+                logger.error(f"No Authorization header in request to {request.path}")
+                logger.error(f"Available headers: {dict(request.headers)}")
                 return jsonify({
                     'status': 'error',
                     'message': 'Authorization header required'
                 }), 401
             
             try:
-                # Extract username from Authorization header
-                # Format: "Bearer username"
+                # Extract token from Authorization header
+                # Format: "Bearer <JWT_TOKEN>"
                 parts = auth_header.split(' ')
                 if len(parts) != 2 or parts[0] != 'Bearer':
                     return jsonify({
@@ -59,7 +61,24 @@ def require_domain_auth(f):
                         'message': 'Invalid authorization format'
                     }), 401
                 
-                username = parts[1].strip()
+                token = parts[1].strip()
+                
+                # Decode JWT token to get username
+                try:
+                    token_data = decode_token(token)
+                    username = token_data.get('sub') or token_data.get('identity')
+                    if not username:
+                        logger.error("No username found in JWT token")
+                        return jsonify({
+                            'status': 'error',
+                            'message': 'Invalid token format'
+                        }), 401
+                except Exception as token_error:
+                    logger.error(f"Failed to decode JWT token: {str(token_error)}")
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Invalid or expired token'
+                    }), 401
                 
                 # Validate user belongs to current domain's database
                 if not database_manager.validate_user_belongs_to_domain(username, domain):

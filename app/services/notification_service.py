@@ -78,24 +78,22 @@ class NotificationService:
             Created Notification object or None if failed
         """
         try:
-            # Validate user exists
+            # Validate user exists and get user_id
+            actual_user_id = None
             if isinstance(user_id, str) and len(user_id) == 36:
-                # user_id is already a UUID
-                user = get_db_session().query(User).filter_by(user_id=user_id).first()
+                # user_id is already a UUID - verify it exists
+                actual_user_id = get_db_session().query(User.user_id).filter_by(user_id=user_id).scalar()
             else:
                 # Try legacy integer lookup
                 try:
-                    import uuid
-                    # For backward compatibility, assume integer user_id corresponds to user index
-                    users = get_db_session().query(User).all()
-                    if isinstance(user_id, int) and 1 <= user_id <= len(users):
-                        user = users[user_id - 1]
-                    else:
-                        user = None
+                    # For backward compatibility, get the nth user's ID
+                    if isinstance(user_id, int) and user_id >= 1:
+                        result = get_db_session().query(User.user_id).offset(user_id - 1).limit(1).first()
+                        actual_user_id = result[0] if result else None
                 except:
-                    user = None
+                    actual_user_id = None
 
-            if not user:
+            if not actual_user_id:
                 current_app.logger.error(f"User {user_id} not found for notification")
                 return None
             
@@ -109,7 +107,7 @@ class NotificationService:
                     data_json = None
             
             notification = Notification(
-                user_id=user.user_id,
+                user_id=actual_user_id,
                 type=notification_type,
                 title=title,
                 message=message,
@@ -139,9 +137,9 @@ class NotificationService:
     ) -> Optional[Notification]:
         """Create SLA breach notification for a recruiter"""
         try:
-            # Find the recruiter user
-            user = get_db_session().query(User).filter_by(username=assigned_recruiter).first()
-            if not user:
+            # Find the recruiter user - only fetch user_id
+            user_id = get_db_session().query(User.user_id).filter_by(username=assigned_recruiter).scalar()
+            if not user_id:
                 current_app.logger.warning(f"Recruiter {assigned_recruiter} not found for SLA breach notification")
                 return None
             
@@ -160,11 +158,11 @@ class NotificationService:
             # Set expiration to 7 days from now
             expires_at = datetime.now(IST) + timedelta(days=7)
             
-            # Create notification directly since we already have the user
+            # Create notification directly since we already have the user_id
             data_json = json.dumps(data) if data else None
             
             notification = Notification(
-                user_id=user.user_id,
+                user_id=user_id,
                 type='sla_breach',
                 title=title,
                 message=message,
@@ -175,7 +173,7 @@ class NotificationService:
             get_db_session().add(notification)
             get_db_session().commit()
             
-            current_app.logger.info(f"Created notification {notification.notification_id} for user {user.username}: sla_breach")
+            current_app.logger.info(f"Created notification {notification.notification_id} for user {assigned_recruiter}: sla_breach")
             return notification
             
         except Exception as e:
@@ -192,9 +190,9 @@ class NotificationService:
     ) -> Optional[Notification]:
         """Create new requirement assignment notification for a recruiter"""
         try:
-            # Find the recruiter user
-            user = get_db_session().query(User).filter_by(username=recruiter_username).first()
-            if not user:
+            # Find the recruiter user - only fetch user_id
+            user_id = get_db_session().query(User.user_id).filter_by(username=recruiter_username).scalar()
+            if not user_id:
                 current_app.logger.warning(f"Recruiter {recruiter_username} not found for assignment notification")
                 return None
             
@@ -211,11 +209,11 @@ class NotificationService:
             # Set expiration to 30 days from now
             expires_at = datetime.now(IST) + timedelta(days=30)
             
-            # Create notification directly since we already have the user
+            # Create notification directly since we already have the user_id
             data_json = json.dumps(data) if data else None
             
             notification = Notification(
-                user_id=user.user_id,
+                user_id=user_id,
                 type='new_assignment',
                 title=title,
                 message=message,
@@ -226,7 +224,7 @@ class NotificationService:
             get_db_session().add(notification)
             get_db_session().commit()
             
-            current_app.logger.info(f"Created notification {notification.notification_id} for user {user.username}: new_assignment")
+            current_app.logger.info(f"Created notification {notification.notification_id} for user {recruiter_username}: new_assignment")
             return notification
             
         except Exception as e:
@@ -353,10 +351,14 @@ class NotificationService:
         try:
             # Convert legacy integer user_id to UUID if needed
             if isinstance(user_id, int):
-                users = get_db_session().query(User).all()
-                if 1 <= user_id <= len(users):
-                    actual_user_id = users[user_id - 1].user_id
+                # Get the nth user's ID without fetching all users
+                if user_id >= 1:
+                    result = get_db_session().query(User.user_id).offset(user_id - 1).limit(1).first()
+                    actual_user_id = result[0] if result else None
                 else:
+                    actual_user_id = None
+                    
+                if not actual_user_id:
                     return []
             else:
                 actual_user_id = user_id
@@ -373,10 +375,14 @@ class NotificationService:
         try:
             # Convert legacy integer user_id to UUID if needed
             if isinstance(user_id, int):
-                users = get_db_session().query(User).all()
-                if 1 <= user_id <= len(users):
-                    actual_user_id = users[user_id - 1].user_id
+                # Get the nth user's ID without fetching all users
+                if user_id >= 1:
+                    result = get_db_session().query(User.user_id).offset(user_id - 1).limit(1).first()
+                    actual_user_id = result[0] if result else None
                 else:
+                    actual_user_id = None
+                    
+                if not actual_user_id:
                     return 0
             else:
                 actual_user_id = user_id
@@ -390,30 +396,39 @@ class NotificationService:
     def mark_notification_as_read(notification_id: int, user_id: Union[int, str]) -> bool:
         """Mark a specific notification as read"""
         try:
-            # Get the user (handle both legacy integer and UUID user_id)
+            # Get the user role and actual user_id (handle both legacy integer and UUID user_id)
             from app.models.user import User
-            if isinstance(user_id, str) and len(user_id) == 36:
-                user = get_db_session().query(User).filter_by(user_id=user_id).first()
-            else:
-                # Legacy integer lookup
-                users = get_db_session().query(User).all()
-                if isinstance(user_id, int) and 1 <= user_id <= len(users):
-                    user = users[user_id - 1]
-                else:
-                    user = None
+            actual_user_id = None
+            user_role = None
             
-            if user and user.role == 'admin':
+            if isinstance(user_id, str) and len(user_id) == 36:
+                # Fetch only user_id and role
+                result = get_db_session().query(User.user_id, User.role).filter_by(user_id=user_id).first()
+                if result:
+                    actual_user_id, user_role = result
+            else:
+                # Legacy integer lookup - fetch only user_id and role
+                if isinstance(user_id, int) and user_id >= 1:
+                    result = get_db_session().query(User.user_id, User.role).offset(user_id - 1).limit(1).first()
+                    if result:
+                        actual_user_id, user_role = result
+            
+            if not actual_user_id:
+                current_app.logger.warning(f"User {user_id} not found")
+                return False
+            
+            if user_role and user_role.value == 'admin':
                 # Admin can mark any notification as read
                 notification = get_db_session().query(Notification).filter_by(notification_id=notification_id).first()
             else:
                 # Regular users can only mark their own notifications as read
                 notification = get_db_session().query(Notification).filter_by(
                     notification_id=notification_id,
-                    user_id=user_id
+                    user_id=actual_user_id
                 ).first()
             
             if not notification:
-                if user and user.role == 'admin':
+                if user_role and user_role.value == 'admin':
                     current_app.logger.warning(f"Notification {notification_id} not found")
                 else:
                     current_app.logger.warning(f"Notification {notification_id} not found for user {user_id}")
@@ -430,19 +445,28 @@ class NotificationService:
     def mark_all_as_read(user_id: Union[int, str]) -> bool:
         """Mark all notifications as read for a user"""
         try:
-            # Get the user (handle both legacy integer and UUID user_id)
+            # Get the user role and actual user_id (handle both legacy integer and UUID user_id)
             from app.models.user import User
-            if isinstance(user_id, str) and len(user_id) == 36:
-                user = get_db_session().query(User).filter_by(user_id=user_id).first()
-            else:
-                # Legacy integer lookup
-                users = get_db_session().query(User).all()
-                if isinstance(user_id, int) and 1 <= user_id <= len(users):
-                    user = users[user_id - 1]
-                else:
-                    user = None
+            actual_user_id = None
+            user_role = None
             
-            if user and user.role == 'admin':
+            if isinstance(user_id, str) and len(user_id) == 36:
+                # Fetch only user_id and role
+                result = get_db_session().query(User.user_id, User.role).filter_by(user_id=user_id).first()
+                if result:
+                    actual_user_id, user_role = result
+            else:
+                # Legacy integer lookup - fetch only user_id and role
+                if isinstance(user_id, int) and user_id >= 1:
+                    result = get_db_session().query(User.user_id, User.role).offset(user_id - 1).limit(1).first()
+                    if result:
+                        actual_user_id, user_role = result
+            
+            if not actual_user_id:
+                current_app.logger.warning(f"User {user_id} not found")
+                return False
+            
+            if user_role and user_role.value == 'admin':
                 # Admin marks ALL unread notifications as read (from all users)
                 all_unread_notifications = get_db_session().query(Notification).filter_by(is_read=False).all()
                 count = 0
@@ -454,7 +478,7 @@ class NotificationService:
                 current_app.logger.info(f"Admin marked {count} notifications as read from all users")
             else:
                 # Regular user marks only their own notifications as read
-                count = Notification.mark_all_as_read(user_id)
+                count = Notification.mark_all_as_read(actual_user_id)
                 current_app.logger.info(f"Marked {count} notifications as read for user {user_id}")
             
             return True
@@ -473,11 +497,12 @@ class NotificationService:
         """Create notifications for all admin users"""
         notifications = []
         try:
-            admin_users = get_db_session().query(User).filter_by(role='admin').all()
+            # Fetch only user_id for admin users
+            admin_user_ids = get_db_session().query(User.user_id).filter_by(role='admin').all()
             
-            for admin in admin_users:
+            for (admin_id,) in admin_user_ids:
                 notification = NotificationService.create_notification(
-                    user_id=admin.user_id,
+                    user_id=admin_id,
                     notification_type=notification_type,
                     title=title,
                     message=message,

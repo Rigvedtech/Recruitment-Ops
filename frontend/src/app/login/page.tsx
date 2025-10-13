@@ -40,8 +40,11 @@ const Login: React.FC = () => {
       if (response.status === 'success') {
         const user: User = response.user;
         
-        // Store user data in localStorage
+        // Store user data and JWT token in localStorage
         localStorage.setItem('user', JSON.stringify(user));
+        if (response.access_token) {
+          localStorage.setItem('access_token', response.access_token);
+        }
         
         // Dispatch custom event to notify NavigationWrapper
         window.dispatchEvent(new Event('userStateChanged'));

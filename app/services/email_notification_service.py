@@ -30,15 +30,11 @@ class EmailNotificationService:
     ) -> bool:
         """Send email notification for new assignment"""
         try:
-            # Find the recruiter user
+            # Find the recruiter user - only fetch email
             session = EmailNotificationService.get_db_session()
-            user = session.query(User).filter_by(username=recruiter_username).first()
-            if not user:
-                current_app.logger.warning(f"Recruiter {recruiter_username} not found for email notification")
-                return False
-            
-            if not user.email:
-                current_app.logger.warning(f"Recruiter {recruiter_username} has no email address configured")
+            user_email = session.query(User.email).filter_by(username=recruiter_username).scalar()
+            if not user_email:
+                current_app.logger.warning(f"Recruiter {recruiter_username} not found or has no email address configured")
                 return False
             
             # Create email content
@@ -54,17 +50,17 @@ class EmailNotificationService:
             # Send email using EmailProcessor
             email_processor = EmailProcessor()
             result = email_processor.send_email(
-                to_email=user.email,
+                to_email=user_email,
                 subject=subject,
                 body=html_content,
                 request_id=request_id
             )
             
             if result.get('success', False):
-                current_app.logger.info(f"Assignment email sent successfully to {user.email} for {request_id}")
+                current_app.logger.info(f"Assignment email sent successfully to {user_email} for {request_id}")
                 return True
             else:
-                current_app.logger.error(f"Failed to send assignment email to {user.email}: {result.get('error', 'Unknown error')}")
+                current_app.logger.error(f"Failed to send assignment email to {user_email}: {result.get('error', 'Unknown error')}")
                 return False
                 
         except Exception as e:

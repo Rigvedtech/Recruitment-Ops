@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Optional, Any
 from flask import current_app, request
 from app.services.connection_manager import connection_manager, set_db_session_for_domain
-from app.services.domain_cache_service import DomainCacheService
+from app.services.redis_domain_cache_service import enhanced_domain_cache_service
 from app.services.external_api_client import ExternalEnvironmentAPIClient
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ class DatabaseManager:
     """Manages domain-to-database mapping and switching for domain isolation"""
     
     def __init__(self):
-        self.cache_service = DomainCacheService()
+        self.cache_service = enhanced_domain_cache_service
         self.api_client = None
         self._domain_mappings = {
             'rigved-rops.rigvedtech.com:3000': 'rigvedtech_prod',
@@ -102,6 +102,43 @@ class DatabaseManager:
         Returns:
             PostgreSQL credentials dictionary or None if not found
         """
+        # Handle localhost domains - return credentials from .env config
+        from urllib.parse import urlparse
+        try:
+            parsed = urlparse(f"http://{domain}")
+            hostname = (parsed.hostname or '').lower()
+            is_localhost = hostname in ['localhost', '127.0.0.1']
+        except Exception:
+            is_localhost = False
+        
+        if is_localhost:
+            logger.info(f"Localhost domain detected: {domain}, using .env database credentials")
+            # For localhost, return credentials from Flask app config (.env)
+            try:
+                from flask import current_app
+                postgres_creds = {
+                    'POSTGRES_HOST': current_app.config.get('DB_HOST'),
+                    'POSTGRES_PORT': current_app.config.get('DB_PORT'),
+                    'POSTGRES_DB': current_app.config.get('DB_NAME'),
+                    'POSTGRES_USER': current_app.config.get('DB_USER'),
+                    'POSTGRES_PASSWORD': current_app.config.get('DB_PASS')
+                }
+                
+                # Validate that all required credentials are present
+                required_keys = ['POSTGRES_HOST', 'POSTGRES_PORT', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD']
+                missing_keys = [key for key in required_keys if not postgres_creds[key]]
+                
+                if missing_keys:
+                    logger.error(f"Missing database credentials in .env for localhost: {missing_keys}")
+                    return None
+                
+                logger.info(f"Using .env credentials for localhost domain: {domain}")
+                return postgres_creds
+                
+            except Exception as e:
+                logger.error(f"Error getting .env credentials for localhost domain {domain}: {str(e)}")
+                return None
+        
         # First, try to get from cache
         cached_creds = self.cache_service.get_credentials(domain)
         if cached_creds:
@@ -180,7 +217,34 @@ class DatabaseManager:
                 logger.debug(f"Database session already set for domain: {domain}")
                 return True
             
-            # Switch to domain-specific database
+            # Handle localhost domains - use default SQLAlchemy config instead of external credentials
+            from urllib.parse import urlparse
+            try:
+                parsed = urlparse(f"http://{domain}")
+                hostname = (parsed.hostname or '').lower()
+                is_localhost = hostname in ['localhost', '127.0.0.1']
+            except Exception:
+                is_localhost = False
+            
+            if is_localhost:
+                logger.info(f"Localhost domain detected: {domain}, using default SQLAlchemy configuration")
+                # For localhost, use the default database session from Flask-SQLAlchemy
+                # This bypasses the domain-specific database switching
+                from app.database import db
+                try:
+                    # Test the default connection
+                    session = db.session
+                    session.execute("SELECT 1")
+                    # Set the session in g context for consistency
+                    g.db_session = session
+                    g.domain = domain
+                    logger.info(f"Localhost database session established for domain: {domain}")
+                    return True
+                except Exception as e:
+                    logger.error(f"Failed to establish localhost database session for {domain}: {str(e)}")
+                    return False
+            
+            # Switch to domain-specific database for non-localhost domains
             return self.switch_to_domain_database(domain)
             
         except Exception as e:
@@ -210,11 +274,11 @@ class DatabaseManager:
                 logger.error("No database session available for user validation")
                 return False
             
-            # Query user in domain-specific database
+            # Query user in domain-specific database - only check if exists
             from app.models.user import User
-            user = g.db_session.query(User).filter_by(username=username).first()
+            user_exists = g.db_session.query(User.user_id).filter_by(username=username).first() is not None
             
-            if user:
+            if user_exists:
                 logger.info(f"User {username} found in domain {domain} database")
                 return True
             else:

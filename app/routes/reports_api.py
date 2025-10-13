@@ -5,8 +5,13 @@ from sqlalchemy import and_, func
 from app.database import db
 from app.models import Requirement, Profile, Screening, InterviewScheduled, InterviewRoundOne, InterviewRoundTwo, Onboarding, Meeting
 from app.routes.api import get_db_session
+from app.middleware.redis_performance_middleware import cache_response, cache_database_query
 
 reports_bp = Blueprint('reports', __name__, url_prefix='/api/reports')
+
+@reports_bp.route('/health', methods=['GET'])
+def reports_health():
+    return jsonify({'ok': True, 'service': 'reports'}), 200
 
 
 def _parse_date(value: str):
@@ -19,6 +24,7 @@ def _parse_date(value: str):
 
 
 @reports_bp.route('/recruitment', methods=['GET'])
+@cache_response(ttl=300)  # Cache for 5 minutes - reports can be slightly stale
 def recruitment_report():
     """Aggregate recruitment report per requirement with optional date and company filters.
 
