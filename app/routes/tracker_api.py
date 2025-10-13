@@ -315,27 +315,8 @@ def get_tracker_requirements():
         # Initialize email categorizer
         email_processor = EmailProcessor()
         
-        # Get user from request headers for role-based filtering
-        auth_header = request.headers.get('Authorization')
-        current_user = None
-        
-        if auth_header:
-            try:
-                parts = auth_header.split(' ')
-                if len(parts) == 2 and parts[0] == 'Bearer':
-                    username = parts[1].strip()  # Trim whitespace from username
-                    from app.models.user import User
-                    # Try exact match first, then try with trailing space (for backward compatibility)
-                    current_user = get_db_session().query(User).filter_by(username=username).first()
-                    if not current_user:
-                        # Try with trailing space (for data inconsistency)
-                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
-                    if not current_user:
-                        # Try without trailing space if username has one
-                        if username.endswith(' '):
-                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
-            except Exception as e:
-                current_app.logger.warning(f"Error parsing auth header: {str(e)}")
+        # Get authenticated user placed by domain auth middleware
+        current_user = getattr(request, 'current_user', None)
         
         # Get manual requirements (these should always be included regardless of email subject)
         # Exclude project requirements from main tracker and soft-deleted requirements
@@ -358,18 +339,27 @@ def get_tracker_requirements():
         )
         
         # Apply role-based filtering to both manual and automatic requirements
-        if current_user and current_user.role.value == 'recruiter':
-            # For recruiters, only show requirements assigned to them AND not on hold
+        if current_user and getattr(current_user.role, 'value', None) == 'recruiter':
+            # For recruiters, only show requirements assigned to them (Assignment.is_active) or legacy owner
+            from sqlalchemy import or_, and_
+            from app.models.assignment import Assignment
+            from app.models.requirement import RequirementStatusEnum
             manual_query = manual_query.filter(
-                Requirement.user_id == current_user.user_id,
-                Requirement.status != 'On_Hold'
+                or_(
+                    Requirement.user_id == current_user.user_id,
+                    Requirement.assignments.any(and_(Assignment.user_id == current_user.user_id, Assignment.is_active == True))
+                ),
+                Requirement.status != RequirementStatusEnum.On_Hold
             )
             automatic_query = automatic_query.filter(
-                Requirement.user_id == current_user.user_id,
-                Requirement.status != 'On_Hold'
+                or_(
+                    Requirement.user_id == current_user.user_id,
+                    Requirement.assignments.any(and_(Assignment.user_id == current_user.user_id, Assignment.is_active == True))
+                ),
+                Requirement.status != RequirementStatusEnum.On_Hold
             )
-            current_app.logger.info(f"Filtering requirements for recruiter: {current_user.username} (excluding on-hold requirements)")
-        elif current_user and current_user.role == 'admin':
+            current_app.logger.info(f"Filtering requirements for recruiter via assignments: {current_user.username}")
+        elif current_user and getattr(current_user.role, 'value', None) == 'admin':
             # For admins, show all requirements including on-hold ones
             current_app.logger.info(f"Showing all requirements for admin: {current_user.username}")
         else:
@@ -1014,27 +1004,32 @@ def restore_tracker_requirement(request_id):
 def get_archived_requirements():
     """Get all archived (soft-deleted) requirements (admin only)"""
     try:
-        # Get current user for role-based validation
-        auth_header = request.headers.get('Authorization')
-        current_user = None
-        
-        if auth_header:
-            try:
-                parts = auth_header.split(' ')
-                if len(parts) == 2 and parts[0] == 'Bearer':
-                    username = parts[1].strip()
-                    from app.models.user import User
-                    current_user = get_db_session().query(User).filter_by(username=username).first()
-                    if not current_user:
-                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
-                    if not current_user:
-                        if username.endswith(' '):
-                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
-            except Exception as e:
-                current_app.logger.warning(f"Error parsing auth header: {str(e)}")
+        # Prefer middleware-populated authenticated user (JWT + Redis)
+        current_user = getattr(request, 'current_user', None)
+        if not current_user:
+            # Fallback: support legacy header-based username for backward compatibility
+            auth_header = request.headers.get('Authorization')
+            if auth_header:
+                try:
+                    parts = auth_header.split(' ')
+                    if len(parts) == 2 and parts[0] == 'Bearer':
+                        from app.models.user import User
+                        username = parts[1].strip()
+                        # Try decode as JWT to extract identity/subject
+                        try:
+                            from flask_jwt_extended import decode_token
+                            token_data = decode_token(username)
+                            username = token_data.get('sub') or token_data.get('identity') or username
+                        except Exception:
+                            pass
+                        current_user = get_db_session().query(User).filter_by(username=username).first() or \
+                                       get_db_session().query(User).filter_by(username=f"{username} ").first() or \
+                                       (get_db_session().query(User).filter_by(username=username.rstrip()).first() if username.endswith(' ') else None)
+                except Exception:
+                    pass
         
         # Only admins can view archived requirements
-        if not current_user or current_user.role.value != 'admin':
+        if not current_user or getattr(getattr(current_user, 'role', None), 'value', None) != 'admin':
             return jsonify({'error': 'Only administrators can view archived requirements'}), 403
         
         # Get all archived requirements
@@ -1840,6 +1835,7 @@ def get_closed_requirements():
     """Get all closed requirements with metrics"""
     try:
         from app.models.user import User
+        from app.models.assignment import Assignment
         
         # Get all closed requirements
         closed_requirements = get_db_session().query(Requirement).filter_by(status='Closed').all()
@@ -1857,19 +1853,36 @@ def get_closed_requirements():
             # Calculate selected profiles count from profile status
             selected_profiles_count = len([p for p in profiles if p.status and p.status.value == 'onboarded'])
             
-            # Get assigned recruiter name instead of count
+            # Build assigned recruiters list (active assignments) and legacy primary name
+            assigned_recruiters = []
+            try:
+                active_assignments = get_db_session().query(Assignment).filter_by(
+                    requirement_id=requirement.requirement_id,
+                    is_active=True
+                ).all()
+                for a in active_assignments:
+                    # Prefer username; fallback to full_name
+                    if a.user:
+                        name = getattr(a.user, 'username', None) or getattr(a.user, 'full_name', None)
+                        if name:
+                            assigned_recruiters.append(name)
+            except Exception:
+                pass
+
+            # Legacy single recruiter (owner)
             recruiter_name = None
             if requirement.user_id:
                 recruiter = get_db_session().query(User).filter_by(user_id=requirement.user_id).first()
                 if recruiter:
-                    recruiter_name = recruiter.full_name
+                    recruiter_name = getattr(recruiter, 'full_name', None) or getattr(recruiter, 'username', None)
             
             closed_data.append({
                 'request_id': requirement.request_id,  # Use request_id instead of requirement_id for proper format
                 'job_title': requirement.job_title,
                 'company_name': format_enum_for_display(requirement.company_name),
                 'overall_time': requirement.get_overall_time(),
-                'recruiter_name': recruiter_name,  # Return recruiter name instead of count
+                'recruiter_name': recruiter_name,  # legacy for backward compatibility
+                'assigned_recruiters': assigned_recruiters,
                 'profiles_count': profiles_count,
                 'selected_profiles_count': selected_profiles_count,
                 'closed_at': requirement.closed_at.isoformat() if requirement.closed_at else None,

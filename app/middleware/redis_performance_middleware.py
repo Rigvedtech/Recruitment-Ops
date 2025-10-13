@@ -265,10 +265,17 @@ class RedisPerformanceMiddleware:
     
     def _extract_request_params(self):
         """Extract request parameters for caching"""
+        # Include domain, query/body, and a hashed auth token so caches are user-specific
+        auth_header = request.headers.get('Authorization') or ''
+        try:
+            auth_hash = hashlib.md5(auth_header.encode()).hexdigest() if auth_header else None
+        except Exception:
+            auth_hash = None
         params = {
             'args': dict(request.args),
             'json': request.get_json(silent=True) if request.is_json else None,
-            'domain': request.headers.get('X-Original-Domain', 'default')
+            'domain': request.headers.get('X-Original-Domain', 'default'),
+            'auth': auth_hash
         }
         return params
     

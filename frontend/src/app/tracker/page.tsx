@@ -974,7 +974,25 @@ const TrackerPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {req.recruiter_name || 'Unassigned'}
+                            <div className="flex flex-wrap gap-1">
+                            {(() => {
+                              const raw = Array.isArray(req.assigned_recruiters)
+                                ? req.assigned_recruiters
+                                : String(
+                                    (req.recruiter_name ?? req.recruiters ?? req.assigned_to ?? '')
+                                  )
+                                    .split(',')
+                                    .map((v: string) => v.trim())
+                                    .filter(Boolean);
+                              return raw.length > 0
+                                ? raw.map((name: string) => (
+                                    <span key={name} className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                                      {name}
+                                    </span>
+                                  ))
+                                : <span className="text-gray-500">Unassigned</span>;
+                            })()}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

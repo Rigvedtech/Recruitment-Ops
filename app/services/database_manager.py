@@ -115,7 +115,6 @@ class DatabaseManager:
             logger.info(f"Localhost domain detected: {domain}, using .env database credentials")
             # For localhost, return credentials from Flask app config (.env)
             try:
-                from flask import current_app
                 postgres_creds = {
                     'POSTGRES_HOST': current_app.config.get('DB_HOST'),
                     'POSTGRES_PORT': current_app.config.get('DB_PORT'),

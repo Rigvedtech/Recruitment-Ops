@@ -104,7 +104,7 @@ const JDTrackerTable: React.FC = () => {
       }
       setUser(userData);
       setAuthChecked(true);
-      fetchTrackerData();
+      fetchTrackerData(userData);
     } catch (err) {
       console.error('Error parsing stored user data:', err);
       localStorage.removeItem('user');
@@ -112,18 +112,52 @@ const JDTrackerTable: React.FC = () => {
     }
   }, [router]);
 
-  const fetchTrackerData = async () => {
+  const fetchTrackerData = async (currentUser?: User | null) => {
     try {
       setLoading(true);
       // Try the new profiles-count endpoint first
       const data = await api.get('/tracker/profiles-count');
-      setRequirements(data.requirements || []);
+      let items: TrackerRequirement[] = data.requirements || [];
+      // Client-side enforcement: recruiters should only see their assigned requirements
+      const effectiveUser = currentUser ?? user;
+      if (effectiveUser?.role === 'recruiter' && effectiveUser?.username) {
+        const username = effectiveUser.username;
+        const norm = (s: string | undefined | null) => (s || '').trim().toLowerCase();
+        const isAssignedToUser = (req: TrackerRequirement) => {
+          const legacyAssignedTo = norm(req.assigned_to as unknown as string);
+          if (legacyAssignedTo && legacyAssignedTo === norm(username)) return true;
+          const ar = req.assigned_recruiters;
+          if (!ar || ar.length === 0) return false;
+          // Support both array of strings and accidental single comma-joined string
+          const list: string[] = Array.isArray(ar) ? ar : String(ar).split(',');
+          const normalized = list.map(v => norm(v)).filter(Boolean);
+          return normalized.includes(norm(username));
+        };
+        items = items.filter(isAssignedToUser);
+      }
+      setRequirements(items);
     } catch (err) {
       console.error('Error fetching tracker data with profiles count:', err);
       // Fallback to original endpoint if profiles-count fails
       try {
         const data = await api.get('/tracker');
-        setRequirements(data || []);
+        let items: TrackerRequirement[] = (data || []) as TrackerRequirement[];
+        const effectiveUser = currentUser ?? user;
+        if (effectiveUser?.role === 'recruiter' && effectiveUser?.username) {
+          const username = effectiveUser.username;
+          const norm = (s: string | undefined | null) => (s || '').trim().toLowerCase();
+          const isAssignedToUser = (req: TrackerRequirement) => {
+            const legacyAssignedTo = norm(req.assigned_to as unknown as string);
+            if (legacyAssignedTo && legacyAssignedTo === norm(username)) return true;
+            const ar = req.assigned_recruiters;
+            if (!ar || ar.length === 0) return false;
+            const list: string[] = Array.isArray(ar) ? ar : String(ar).split(',');
+            const normalized = list.map(v => norm(v)).filter(Boolean);
+            return normalized.includes(norm(username));
+          };
+          items = items.filter(isAssignedToUser);
+        }
+        setRequirements(items);
       } catch (fallbackErr) {
         setError('Failed to fetch tracker data');
         console.error('Error fetching tracker data:', fallbackErr);
@@ -259,7 +293,7 @@ const JDTrackerTable: React.FC = () => {
           <p className="text-xl font-semibold mb-2">Error</p>
           <p>{error}</p>
           <button
-            onClick={fetchTrackerData}
+            onClick={() => fetchTrackerData(user)}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Retry
