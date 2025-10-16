@@ -1373,36 +1373,43 @@ const AddRequirementPage: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select Company</option>
-                    <option value="Tech_Corp">Tech Corp</option>
-                    <option value="Infosys">Infosys</option>
-                    <option value="TCS">TCS</option>
-                    <option value="Wipro">Wipro</option>
-                    <option value="Accenture">Accenture</option>
-                    <option value="Cognizant">Cognizant</option>
-                    <option value="Capgemini">Capgemini</option>
-                    <option value="IBM">IBM</option>
-                    <option value="Microsoft">Microsoft</option>
-                    <option value="Google">Google</option>
-                    <option value="Amazon">Amazon</option>
-                    <option value="Oracle">Oracle</option>
-                    <option value="SAP">SAP</option>
-                    <option value="Deloitte">Deloitte</option>
-                    <option value="PwC">PwC</option>
-                    <option value="KPMG">KPMG</option>
-                    <option value="EY">EY</option>
-                    <option value="McKinsey">McKinsey</option>
-                    <option value="BCG">BCG</option>
-                    <option value="Bain">Bain</option>
-                    <option value="BOSCH">BOSCH</option>
-                    {/* Dynamically added companies */}
-                    {dynamicOptions.companies.map((company, index) => {
-                      const sanitizedValue = enumValueMapping.companies[company] || company;
-                      return (
-                        <option key={`custom-${index}`} value={sanitizedValue}>
-                          {company}
-                        </option>
-                      );
-                    })}
+                    {(() => {
+                      const staticCompanies = [
+                        { value: 'Tech_Corp', label: 'Tech Corp' },
+                        { value: 'Infosys', label: 'Infosys' },
+                        { value: 'TCS', label: 'TCS' },
+                        { value: 'Wipro', label: 'Wipro' },
+                        { value: 'Accenture', label: 'Accenture' },
+                        { value: 'Cognizant', label: 'Cognizant' },
+                        { value: 'Capgemini', label: 'Capgemini' },
+                        { value: 'IBM', label: 'IBM' },
+                        { value: 'Microsoft', label: 'Microsoft' },
+                        { value: 'Google', label: 'Google' },
+                        { value: 'Amazon', label: 'Amazon' },
+                        { value: 'Oracle', label: 'Oracle' },
+                        { value: 'SAP', label: 'SAP' },
+                        { value: 'Deloitte', label: 'Deloitte' },
+                        { value: 'PwC', label: 'PwC' },
+                        { value: 'KPMG', label: 'KPMG' },
+                        { value: 'EY', label: 'EY' },
+                        { value: 'McKinsey', label: 'McKinsey' },
+                        { value: 'BCG', label: 'BCG' },
+                        { value: 'Bain', label: 'Bain' },
+                        { value: 'BOSCH', label: 'BOSCH' }
+                      ]
+                      const dynamic = dynamicOptions.companies.map((label) => ({
+                        value: enumValueMapping.companies[label] || label,
+                        label
+                      }))
+                      const merged = [...staticCompanies, ...dynamic]
+                      const uniqueMap: { [key: string]: string } = {}
+                      merged.forEach(({ value, label }) => { uniqueMap[label] = value })
+                      return Object.entries(uniqueMap)
+                        .sort((a, b) => a[0].localeCompare(b[0], undefined, { sensitivity: 'base' }))
+                        .map(([label, value]) => (
+                          <option key={label} value={value}>{label}</option>
+                        ))
+                    })()}
                     <option value="add_new" className="text-blue-600 font-medium">+ Add New Company</option>
                   </select>
                   
@@ -1456,29 +1463,26 @@ const AddRequirementPage: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select Department</option>
-                    <option value="Engineering">Engineering</option>
-                    <option value="Human_Resources">Human Resources</option>
-                    <option value="Finance">Finance</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Sales">Sales</option>
-                    <option value="Operations">Operations</option>
-                    <option value="Information_Technology">Information Technology</option>
-                    <option value="Customer_Support">Customer Support</option>
-                    <option value="Product_Management">Product Management</option>
-                    <option value="Quality_Assurance">Quality Assurance</option>
-                    <option value="Business_Development">Business Development</option>
-                    <option value="Legal">Legal</option>
-                    <option value="Administration">Administration</option>
-                    <option value="Technical">Technical</option>
-                    {/* Dynamically added departments */}
-                    {dynamicOptions.departments.map((department, index) => {
-                      const sanitizedValue = enumValueMapping.departments[department] || department;
-                      return (
-                        <option key={`custom-${index}`} value={sanitizedValue}>
-                          {department}
-                        </option>
-                      );
-                    })}
+                    {(() => {
+                      const staticDepartments = [
+                        'Engineering', 'Human_Resources', 'Finance', 'Marketing', 'Sales', 'Operations',
+                        'Information_Technology', 'Customer_Support', 'Product_Management', 'Quality_Assurance',
+                        'Business_Development', 'Legal', 'Administration', 'Technical'
+                      ]
+                      const staticPairs = staticDepartments.map(label => ({ value: label, label }))
+                      const dynamic = dynamicOptions.departments.map((label) => ({
+                        value: enumValueMapping.departments[label] || label,
+                        label
+                      }))
+                      const merged = [...staticPairs, ...dynamic]
+                      const uniqueMap: { [key: string]: string } = {}
+                      merged.forEach(({ value, label }) => { uniqueMap[label] = value })
+                      return Object.entries(uniqueMap)
+                        .sort((a, b) => a[0].localeCompare(b[0], undefined, { sensitivity: 'base' }))
+                        .map(([label, value]) => (
+                          <option key={label} value={value}>{label}</option>
+                        ))
+                    })()}
                     <option value="add_new" className="text-blue-600 font-medium">+ Add New Department</option>
                   </select>
                   

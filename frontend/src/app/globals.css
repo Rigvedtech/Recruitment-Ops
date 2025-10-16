@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  html, body {
+    @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
+  }
+  
   .email-content {
     @apply prose prose-sm max-w-none;
   }
@@ -48,3 +52,18 @@
     @apply my-1;
   }
 } 
+
+/* Global dark-mode overrides for common Tailwind utility combos used across pages */
+@layer utilities {
+  /* Make white cards dark */
+  .dark .bg-white { @apply bg-gray-800; }
+  /* Subtle light-gray backgrounds in dark */
+  .dark .bg-gray-50 { @apply bg-gray-800; }
+  /* Borders */
+  .dark .border-gray-200 { @apply border-gray-700; }
+  .dark .border-gray-100 { @apply border-gray-700; }
+  /* Headings/text commonly using gray-900 */
+  .dark .text-gray-900 { @apply text-gray-100; }
+  .dark .text-gray-700 { @apply text-gray-300; }
+  .dark .text-gray-600 { @apply text-gray-300; }
+}

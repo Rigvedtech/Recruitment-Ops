@@ -62,6 +62,22 @@ interface Requirement {
 
 type WorkflowStep = 'candidate_submission' | 'submitted_profiles' | 'screening' | 'interview_scheduled' | 'interview_round_1' | 'interview_round_2' | 'offered' | 'onboarding';
 
+// Utility function to safely check if a value is in a Set
+// Prevents "s.has is not a function" errors when Sets are accidentally converted to arrays
+const safeHas = (set: Set<string> | any, value: string): boolean => {
+  if (!set) return false;
+  if (set instanceof Set) return set.has(value);
+  if (Array.isArray(set)) return set.includes(value);
+  return false;
+};
+
+// Utility function to safely convert arrays to Sets
+const ensureSet = (value: any): Set<string> => {
+  if (value instanceof Set) return value;
+  if (Array.isArray(value)) return new Set(value);
+  return new Set();
+};
+
 export default function RecruiterWorkflowPage() {
   const params = useParams();
   const router = useRouter();
@@ -287,20 +303,15 @@ export default function RecruiterWorkflowPage() {
     if (userLoaded && requestId) {
       const startSLATracking = async () => {
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/tracking/auto-start/${requestId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            }
-          });
+          // Use the api helper for SLA auto-start
+          const response = await api.post(`/sla/tracking/auto-start/${requestId}`, {});
           
-          if (response.ok) {
-            console.log('SLA tracking auto-started for workflow');
-          } else {
-            console.error('Failed to auto-start SLA tracking');
+          if (response) {
+            console.log('SLA tracking auto-started for workflow:', response);
           }
         } catch (error) {
-          console.error('Error auto-starting SLA tracking:', error);
+          // Silently handle error - SLA auto-start is optional
+          console.warn('SLA tracking auto-start skipped:', error);
         }
       };
       
@@ -477,27 +488,27 @@ export default function RecruiterWorkflowPage() {
       const response = await api.get(`/workflow-progress/${requestId}`);
       if (response && response.success && response.data) {
         console.log('Workflow state loaded from backend');
-        // Set all workflow states from backend data
-        setScreeningSelected(new Set(response.data.screening_selected || []));
-        setScreeningRejected(new Set(response.data.screening_rejected || []));
-        setInterviewScheduled(new Set(response.data.interview_scheduled || []));
-        setInterviewRescheduled(new Set(response.data.interview_rescheduled || []));
-        setRound1Selected(new Set(response.data.round1_selected || []));
-        setRound1Rejected(new Set(response.data.round1_rejected || []));
-        setRound1Rescheduled(new Set(response.data.round1_rescheduled || []));
-        setRound2Selected(new Set(response.data.round2_selected || []));
-        setRound2Rejected(new Set(response.data.round2_rejected || []));
-        setRound2Rescheduled(new Set(response.data.round2_rescheduled || []));
-        setOffered(new Set(response.data.offered || []));
-        setOnboarding(new Set(response.data.onboarding || []));
-        setNewlyAddedProfiles(new Set(response.data.newly_added_profiles || []));
+        // Set all workflow states from backend data using ensureSet for safety
+        setScreeningSelected(ensureSet(response.data.screening_selected));
+        setScreeningRejected(ensureSet(response.data.screening_rejected));
+        setInterviewScheduled(ensureSet(response.data.interview_scheduled));
+        setInterviewRescheduled(ensureSet(response.data.interview_rescheduled));
+        setRound1Selected(ensureSet(response.data.round1_selected));
+        setRound1Rejected(ensureSet(response.data.round1_rejected));
+        setRound1Rescheduled(ensureSet(response.data.round1_rescheduled));
+        setRound2Selected(ensureSet(response.data.round2_selected));
+        setRound2Rejected(ensureSet(response.data.round2_rejected));
+        setRound2Rescheduled(ensureSet(response.data.round2_rescheduled));
+        setOffered(ensureSet(response.data.offered));
+        setOnboarding(ensureSet(response.data.onboarding));
+        setNewlyAddedProfiles(ensureSet(response.data.newly_added_profiles));
         setSessionStartTime(response.data.session_start_time || Date.now());
         
         // Load blocked profiles information
         if (response.data.blocked_profiles) {
           const blockedProfilesData: {[key: string]: Set<string>} = {};
           Object.keys(response.data.blocked_profiles).forEach(step => {
-            blockedProfilesData[step] = new Set(response.data.blocked_profiles[step] || []);
+            blockedProfilesData[step] = ensureSet(response.data.blocked_profiles[step]);
           });
           setBlockedProfiles(blockedProfilesData);
         }
@@ -524,27 +535,27 @@ export default function RecruiterWorkflowPage() {
         const workflowState = JSON.parse(savedState);
         console.log('Workflow state loaded from localStorage backup');
         
-        // Validate and set all workflow states
-        setScreeningSelected(new Set(Array.isArray(workflowState.screening_selected) ? workflowState.screening_selected : []));
-        setScreeningRejected(new Set(Array.isArray(workflowState.screening_rejected) ? workflowState.screening_rejected : []));
-        setInterviewScheduled(new Set(Array.isArray(workflowState.interview_scheduled) ? workflowState.interview_scheduled : []));
-        setInterviewRescheduled(new Set(Array.isArray(workflowState.interview_rescheduled) ? workflowState.interview_rescheduled : []));
-        setRound1Selected(new Set(Array.isArray(workflowState.round1_selected) ? workflowState.round1_selected : []));
-        setRound1Rejected(new Set(Array.isArray(workflowState.round1_rejected) ? workflowState.round1_rejected : []));
-        setRound1Rescheduled(new Set(Array.isArray(workflowState.round1_rescheduled) ? workflowState.round1_rescheduled : []));
-        setRound2Selected(new Set(Array.isArray(workflowState.round2_selected) ? workflowState.round2_selected : []));
-        setRound2Rejected(new Set(Array.isArray(workflowState.round2_rejected) ? workflowState.round2_rejected : []));
-        setRound2Rescheduled(new Set(Array.isArray(workflowState.round2_rescheduled) ? workflowState.round2_rescheduled : []));
-        setOffered(new Set(Array.isArray(workflowState.offered) ? workflowState.offered : []));
-        setOnboarding(new Set(Array.isArray(workflowState.onboarding) ? workflowState.onboarding : []));
-        setNewlyAddedProfiles(new Set(Array.isArray(workflowState.newly_added_profiles) ? workflowState.newly_added_profiles : []));
+        // Validate and set all workflow states using ensureSet for safety
+        setScreeningSelected(ensureSet(workflowState.screening_selected));
+        setScreeningRejected(ensureSet(workflowState.screening_rejected));
+        setInterviewScheduled(ensureSet(workflowState.interview_scheduled));
+        setInterviewRescheduled(ensureSet(workflowState.interview_rescheduled));
+        setRound1Selected(ensureSet(workflowState.round1_selected));
+        setRound1Rejected(ensureSet(workflowState.round1_rejected));
+        setRound1Rescheduled(ensureSet(workflowState.round1_rescheduled));
+        setRound2Selected(ensureSet(workflowState.round2_selected));
+        setRound2Rejected(ensureSet(workflowState.round2_rejected));
+        setRound2Rescheduled(ensureSet(workflowState.round2_rescheduled));
+        setOffered(ensureSet(workflowState.offered));
+        setOnboarding(ensureSet(workflowState.onboarding));
+        setNewlyAddedProfiles(ensureSet(workflowState.newly_added_profiles));
         setSessionStartTime(workflowState.session_start_time || Date.now());
         
         // Load blocked profiles from localStorage if available
         if (workflowState.blocked_profiles) {
           const blockedProfilesData: {[key: string]: Set<string>} = {};
           Object.keys(workflowState.blocked_profiles).forEach(step => {
-            blockedProfilesData[step] = new Set(Array.isArray(workflowState.blocked_profiles[step]) ? workflowState.blocked_profiles[step] : []);
+            blockedProfilesData[step] = ensureSet(workflowState.blocked_profiles[step]);
           });
           setBlockedProfiles(blockedProfilesData);
         }
@@ -589,59 +600,65 @@ export default function RecruiterWorkflowPage() {
       setProfiles(profiles);
       setRequirement(requirement);
       
-      // Load workflow state from new API
+      // Load workflow state from new API using ensureSet for safety
       if (workflowData) {
-        setScreeningSelected(new Set(workflowData.screening_selected || []));
-        setScreeningRejected(new Set(workflowData.screening_rejected || []));
-        setInterviewScheduled(new Set(workflowData.interview_scheduled || []));
-        setInterviewRescheduled(new Set(workflowData.interview_rescheduled || []));
-        setRound1Selected(new Set(workflowData.round1_selected || []));
-        setRound1Rejected(new Set(workflowData.round1_rejected || []));
-        setRound1Rescheduled(new Set(workflowData.round1_rescheduled || []));
-        setRound2Selected(new Set(workflowData.round2_selected || []));
-        setRound2Rejected(new Set(workflowData.round2_rejected || []));
-        setRound2Rescheduled(new Set(workflowData.round2_rescheduled || []));
-        setOffered(new Set(workflowData.offered || []));
-        setOnboarding(new Set(workflowData.onboarding || []));
+        setScreeningSelected(ensureSet(workflowData.screening_selected));
+        setScreeningRejected(ensureSet(workflowData.screening_rejected));
+        setInterviewScheduled(ensureSet(workflowData.interview_scheduled));
+        setInterviewRescheduled(ensureSet(workflowData.interview_rescheduled));
+        setRound1Selected(ensureSet(workflowData.round1_selected));
+        setRound1Rejected(ensureSet(workflowData.round1_rejected));
+        setRound1Rescheduled(ensureSet(workflowData.round1_rescheduled));
+        setRound2Selected(ensureSet(workflowData.round2_selected));
+        setRound2Rejected(ensureSet(workflowData.round2_rejected));
+        setRound2Rescheduled(ensureSet(workflowData.round2_rescheduled));
+        setOffered(ensureSet(workflowData.offered));
+        setOnboarding(ensureSet(workflowData.onboarding));
         setCurrentStep(workflowData.current_step || 'candidate_submission');
-        setNewlyAddedProfiles(new Set(workflowData.newly_added_profiles || []));
+        setNewlyAddedProfiles(ensureSet(workflowData.newly_added_profiles));
         setSessionStartTime(workflowData.session_start_time || Date.now());
         setStepTimestamps(workflowData.step_timestamps || {});
-        setBlockedProfiles(workflowData.blocked_profiles || {
-          screening: [],
-          interview_scheduled: [],
-          interview_round_1: [],
-          interview_round_2: [],
-          offered: [],
-          onboarding: []
+        
+        // Ensure blocked profiles are Sets
+        const blockedProfilesData = workflowData.blocked_profiles || {};
+        setBlockedProfiles({
+          screening: ensureSet(blockedProfilesData.screening),
+          interview_scheduled: ensureSet(blockedProfilesData.interview_scheduled),
+          interview_round_1: ensureSet(blockedProfilesData.interview_round_1),
+          interview_round_2: ensureSet(blockedProfilesData.interview_round_2),
+          offered: ensureSet(blockedProfilesData.offered),
+          onboarding: ensureSet(blockedProfilesData.onboarding)
         });
       } else {
         // Fallback to localStorage if API fails
         const localStorageData = loadFromLocalStorage();
         if (localStorageData) {
-          setScreeningSelected(new Set(localStorageData.screening_selected));
-          setScreeningRejected(new Set(localStorageData.screening_rejected));
-          setInterviewScheduled(new Set(localStorageData.interview_scheduled));
-          setInterviewRescheduled(new Set(localStorageData.interview_rescheduled));
-          setRound1Selected(new Set(localStorageData.round1_selected));
-          setRound1Rejected(new Set(localStorageData.round1_rejected));
-          setRound1Rescheduled(new Set(localStorageData.round1_rescheduled));
-          setRound2Selected(new Set(localStorageData.round2_selected));
-          setRound2Rejected(new Set(localStorageData.round2_rejected));
-          setRound2Rescheduled(new Set(localStorageData.round2_rescheduled));
-          setOffered(new Set(localStorageData.offered));
-          setOnboarding(new Set(localStorageData.onboarding));
+          setScreeningSelected(ensureSet(localStorageData.screening_selected));
+          setScreeningRejected(ensureSet(localStorageData.screening_rejected));
+          setInterviewScheduled(ensureSet(localStorageData.interview_scheduled));
+          setInterviewRescheduled(ensureSet(localStorageData.interview_rescheduled));
+          setRound1Selected(ensureSet(localStorageData.round1_selected));
+          setRound1Rejected(ensureSet(localStorageData.round1_rejected));
+          setRound1Rescheduled(ensureSet(localStorageData.round1_rescheduled));
+          setRound2Selected(ensureSet(localStorageData.round2_selected));
+          setRound2Rejected(ensureSet(localStorageData.round2_rejected));
+          setRound2Rescheduled(ensureSet(localStorageData.round2_rescheduled));
+          setOffered(ensureSet(localStorageData.offered));
+          setOnboarding(ensureSet(localStorageData.onboarding));
           setCurrentStep(localStorageData.current_step);
-          setNewlyAddedProfiles(new Set(localStorageData.newly_added_profiles));
+          setNewlyAddedProfiles(ensureSet(localStorageData.newly_added_profiles));
           setSessionStartTime(localStorageData.session_start_time);
           setStepTimestamps(localStorageData.step_timestamps || {});
-          setBlockedProfiles(localStorageData.blocked_profiles || {
-            screening: [],
-            interview_scheduled: [],
-            interview_round_1: [],
-            interview_round_2: [],
-            offered: [],
-            onboarding: []
+          
+          // Ensure blocked profiles are Sets
+          const blockedProfilesData = localStorageData.blocked_profiles || {};
+          setBlockedProfiles({
+            screening: ensureSet(blockedProfilesData.screening),
+            interview_scheduled: ensureSet(blockedProfilesData.interview_scheduled),
+            interview_round_1: ensureSet(blockedProfilesData.interview_round_1),
+            interview_round_2: ensureSet(blockedProfilesData.interview_round_2),
+            offered: ensureSet(blockedProfilesData.offered),
+            onboarding: ensureSet(blockedProfilesData.onboarding)
           });
         }
       }
@@ -2662,7 +2679,7 @@ export default function RecruiterWorkflowPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-6">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-6">
       <div className="container mx-auto px-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -2956,8 +2973,8 @@ export default function RecruiterWorkflowPage() {
 
         {/* Step 1: Candidate Submission */}
         {currentStep === 'candidate_submission' && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
+          <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">Step 1: Candidate Submission</h2>
@@ -3021,7 +3038,7 @@ export default function RecruiterWorkflowPage() {
               ) : (
                 <div className="space-y-6">
                   {tableData.map((row, rowIndex) => (
-                    <div key={row.student_id} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                    <div key={row.student_id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-6 bg-gray-50 dark:bg-gray-700/40">
                       <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-medium text-gray-900">
                           Candidate {rowIndex + 1}
@@ -3279,11 +3296,11 @@ export default function RecruiterWorkflowPage() {
               {/* Saved Profiles Table */}
               {profiles.length > 0 && (
                 <div className="mt-8">
-                  <div className="border-t border-gray-200 pt-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Saved Profiles</h3>
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Saved Profiles</h3>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-lg">
-                        <thead className="bg-gray-50">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <thead className="bg-gray-50 dark:bg-gray-700/50">
                           <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Candidate Name</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact Info</th>
@@ -3400,7 +3417,7 @@ export default function RecruiterWorkflowPage() {
 
               {/* Action Buttons */}
               {tableData.length > 0 && (
-                <div className="flex justify-between items-center mt-6 pt-6 border-t border-gray-200">
+                <div className="flex justify-between items-center mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                   <div className="flex space-x-3">
                     <button
                       onClick={handleSaveProfiles}
@@ -3436,8 +3453,8 @@ export default function RecruiterWorkflowPage() {
 
         {/* Step 2: Submitted Profiles */}
         {currentStep === 'submitted_profiles' && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
+          <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">Step 2: Submitted Profiles</h2>
@@ -3534,7 +3551,7 @@ export default function RecruiterWorkflowPage() {
             
             {/* Summary */}
             {profiles.length > 0 && (
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex justify-between items-center">
                   <div className="flex space-x-4 text-sm">
                     <span className="text-gray-600">
@@ -3593,8 +3610,8 @@ export default function RecruiterWorkflowPage() {
 
         {/* Step 3: Screening */}
         {currentStep === 'screening' && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
+          <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">Step 3: Screening</h2>
@@ -3704,7 +3721,7 @@ export default function RecruiterWorkflowPage() {
             
             {/* Summary */}
             {profiles.length > 0 && (
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex justify-between items-center">
                   <div className="flex space-x-4 text-sm">
                     <span className="text-gray-600">
@@ -3740,8 +3757,8 @@ export default function RecruiterWorkflowPage() {
 
         {/* Step 4: Interview Scheduled */}
         {currentStep === 'interview_scheduled' && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
+          <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">Step 4: Interview Scheduled</h2>
@@ -3883,7 +3900,7 @@ export default function RecruiterWorkflowPage() {
             
             {/* Summary */}
             {screeningSelected.size > 0 && (
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex justify-between items-center">
                   <div className="flex space-x-4 text-sm">
                     <span className="text-gray-600">
@@ -3939,8 +3956,8 @@ export default function RecruiterWorkflowPage() {
 
         {/* Step 5: Interview Round 1 */}
         {currentStep === 'interview_round_1' && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
+          <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">Step 5: Interview Round 1</h2>
@@ -4096,7 +4113,7 @@ export default function RecruiterWorkflowPage() {
             
             {/* Summary */}
             {interviewScheduled.size > 0 && (
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex justify-between items-center">
                   <div className="flex space-x-4 text-sm">
                     <span className="text-gray-600">

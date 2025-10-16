@@ -80,6 +80,9 @@ const TrackerPage: React.FC = () => {
   
   // View JD Modal state
   const [showViewJDModal, setShowViewJDModal] = useState(false)
+  // Pagination
+  const PAGE_SIZE = 15
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Enhanced filter state with localStorage persistence
   const [filters, setFilters] = useState(() => {
@@ -151,7 +154,8 @@ const TrackerPage: React.FC = () => {
         try {
           const res = await api.get('/get-enum-values?enum_type=company')
           if (res?.success && Array.isArray(res.values)) {
-            setCompanyOptions(res.values)
+            const sorted = [...res.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+            setCompanyOptions(sorted)
           }
         } catch (e) {
           console.error('Failed to load company enum values', e)
@@ -373,6 +377,18 @@ const TrackerPage: React.FC = () => {
         return true;
       });
 
+  // Reset to first page when filters or mode change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [showArchived, filterStatus, JSON.stringify(appliedFilters)])
+
+  // Pagination calculations based on filtered list
+  const totalItems = filteredRequirements.length
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
+  const startIndex = (currentPage - 1) * PAGE_SIZE
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalItems)
+  const paginatedRequirements = filteredRequirements.slice(startIndex, endIndex)
+
   // Don't render anything until authentication is checked
   if (!authChecked) {
     return (
@@ -427,7 +443,7 @@ const TrackerPage: React.FC = () => {
         </div>
       )}
 
-      <div className="mb-6">
+        <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">RFH Tracker</h1>
         
         {/* Stats Cards */}
@@ -557,7 +573,7 @@ const TrackerPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'all' 
                 ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             All ({requirements.length})
@@ -567,7 +583,7 @@ const TrackerPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'open' 
                 ? 'bg-green-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             Open ({stats?.open || 0})
@@ -577,7 +593,7 @@ const TrackerPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'candidate submission' 
                 ? 'bg-purple-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             Candidate Submission ({stats?.candidate_submission || 0})
@@ -587,7 +603,7 @@ const TrackerPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'interview scheduled' 
                 ? 'bg-orange-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             Interview Scheduled ({stats?.interview_scheduled || 0})
@@ -597,7 +613,7 @@ const TrackerPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'offer recommendation' 
                 ? 'bg-indigo-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             Offer Recommendation ({stats?.offer_recommendation || 0})
@@ -607,7 +623,7 @@ const TrackerPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'on boarding' 
                 ? 'bg-pink-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             On boarding ({stats?.on_boarding || 0})
@@ -617,7 +633,7 @@ const TrackerPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'on hold' 
                 ? 'bg-red-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             On Hold ({stats?.on_hold || 0})
@@ -627,7 +643,7 @@ const TrackerPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'closed' 
                 ? 'bg-gray-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             Closed ({stats?.closed || 0})
@@ -645,7 +661,7 @@ const TrackerPage: React.FC = () => {
               className={`px-3 py-1.5 rounded-md text-sm font-medium ${
                 showArchived 
                   ? 'bg-orange-600 text-white' 
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
               }`}
             >
               {showArchived ? 'Show Active' : `Archived (${archivedRequirements.length})`}
@@ -832,7 +848,7 @@ const TrackerPage: React.FC = () => {
 
         {/* Results Summary */}
         <div className="mb-4 text-sm text-gray-600">
-          Showing {filteredRequirements.length} of {showArchived ? archivedRequirements.length : filterStatus === 'closed' ? closedRequirements.length : requirements.length} requirements
+          Showing {totalItems === 0 ? 0 : startIndex + 1}-{endIndex} of {totalItems} requirements
           {Object.values(appliedFilters).filter(filter => filter !== 'all').length > 0 && (
             <span className="text-blue-600"> (filtered)</span>
           )}
@@ -845,8 +861,8 @@ const TrackerPage: React.FC = () => {
       </div>
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg">
+            <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
                 {showArchived ? (
                   <>
@@ -918,12 +934,12 @@ const TrackerPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredRequirements.map((req) => (
+              {paginatedRequirements.map((req) => (
                 <tr key={req.request_id} className="hover:bg-gray-50">
                   {showArchived ? (
                     <>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           {req.request_id}
                         </div>
                       </td>
@@ -933,17 +949,17 @@ const TrackerPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-sm text-gray-900 dark:text-gray-100">
                           {req.company_name || req.sender_name || 'N/A'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-sm text-gray-900 dark:text-gray-100">
                           {formatDate(req.deleted_at)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-sm text-gray-900 dark:text-gray-100">
                           {req.deleted_by || 'N/A'}
                         </div>
                       </td>
@@ -963,7 +979,7 @@ const TrackerPage: React.FC = () => {
                   ) : filterStatus === 'closed' ? (
                     <>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           {req.request_id}
                         </div>
                       </td>
@@ -1133,6 +1149,64 @@ const TrackerPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Pagination Controls - Numbered with ellipses */}
+      {totalItems > 0 && (
+        <div className="flex items-center justify-center px-4 py-3 bg-white border border-t-0 rounded-b-lg shadow">
+          <div className="flex items-center gap-1">
+            {/* Prev */}
+            <button
+              aria-label="Previous page"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className={`w-8 h-8 flex items-center justify-center rounded-full ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100'}`}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 011.414 1.414L8.414 10l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd"/></svg>
+            </button>
+
+            {(() => {
+              const pages: (number | string)[] = []
+              const add = (p: number | string) => pages.push(p)
+              const showRange = (start: number, end: number) => {
+                for (let i = start; i <= end; i++) add(i)
+              }
+              const left = Math.max(2, currentPage - 1)
+              const right = Math.min(totalPages - 1, currentPage + 1)
+              add(1)
+              if (left > 2) add('...')
+              showRange(left, right)
+              if (right < totalPages - 1) add('...')
+              if (totalPages > 1) add(totalPages)
+
+              return pages.map((p, idx) => (
+                typeof p === 'number' ? (
+                  <button
+                    key={`p-${p}-${idx}`}
+                    onClick={() => setCurrentPage(p)}
+                    className={`min-w-8 h-8 px-2 rounded-full text-sm flex items-center justify-center ${
+                      p === currentPage ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ) : (
+                  <span key={`e-${idx}`} className="px-2 text-gray-400 select-none">{p}</span>
+                )
+              ))
+            })()}
+
+            {/* Next */}
+            <button
+              aria-label="Next page"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className={`w-8 h-8 flex items-center justify-center rounded-full ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100'}`}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.293 4.293a1 1 0 011.414 0L14 9.586a1 1 0 010 1.414l-5.293 5.293a1 1 0 01-1.414-1.414L11.586 10 7.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {filteredRequirements.length === 0 && (
         <div className="text-center py-8">
           <p className="text-gray-500">No requirements found for the selected filter.</p>
@@ -1247,7 +1321,8 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
         ])
 
         if (deptRes?.success && Array.isArray(deptRes.values)) {
-          setDepartmentOptions(deptRes.values)
+          const sortedDept = [...deptRes.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+          setDepartmentOptions(sortedDept)
         }
         if (shiftRes?.success && Array.isArray(shiftRes.values)) {
           setShiftOptions(shiftRes.values)
@@ -1326,7 +1401,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">
@@ -1449,7 +1524,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                     type="text"
                     value={formData.job_title}
                     onChange={(e) => handleInputChange('job_title', e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter job title"
                     required
                   />
@@ -1459,7 +1534,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   <select
                     value={formData.company_name}
                     onChange={(e) => handleInputChange('company_name', e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
                     <option value="">Select company</option>
@@ -1480,7 +1555,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                 <select
                   value={formData.department}
                   onChange={(e) => handleInputChange('department', e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select department</option>
                   {departmentOptions.map((dept) => (
@@ -1496,7 +1571,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                     type="text"
                     value={formData.location}
                     onChange={(e) => handleInputChange('location', e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter location"
                   />
                 </div>
@@ -1505,7 +1580,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   <select
                     value={formData.job_type}
                     onChange={(e) => handleInputChange('job_type', e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select job type</option>
                     {jobTypeOptions.map((option) => (
@@ -1520,7 +1595,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                 <select
                   value={formData.shift}
                   onChange={(e) => handleInputChange('shift', e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select shift</option>
                   {shiftOptions.map((option) => (
@@ -1536,7 +1611,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                     type="text"
                     value={formData.experience_range}
                     onChange={(e) => handleInputChange('experience_range', e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g., 3-5 years"
                   />
                 </div>
@@ -1592,7 +1667,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   type="text"
                   value={formData.hiring_manager}
                   onChange={(e) => handleInputChange('hiring_manager', e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter hiring manager name"
                 />
               </div>
@@ -1602,7 +1677,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   value={formData.skills_required}
                   onChange={(e) => handleInputChange('skills_required', e.target.value)}
                   rows={3}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter required skills"
                 />
               </div>
@@ -1612,7 +1687,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   value={formData.minimum_qualification}
                   onChange={(e) => handleInputChange('minimum_qualification', e.target.value)}
                   rows={2}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter minimum qualification"
                 />
               </div>
@@ -1627,7 +1702,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   <select
                     value={formData.status}
                     onChange={(e) => handleInputChange('status', e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {getAvailableStatusOptions().map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1653,7 +1728,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   value={formData.notes}
                   onChange={(e) => handleInputChange('notes', e.target.value)}
                   rows={3}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Add notes..."
                 />
               </div>
@@ -1663,7 +1738,7 @@ const RequirementModal: React.FC<RequirementModalProps> = ({ requirement, onClos
                   value={formData.additional_remarks}
                   onChange={(e) => handleInputChange('additional_remarks', e.target.value)}
                   rows={3}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Add additional remarks..."
                 />
               </div>

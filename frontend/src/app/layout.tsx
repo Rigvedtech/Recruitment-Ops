@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import { EmailProvider } from '@/context/EmailContext';
 import NavigationWrapper from '@/components/NavigationWrapper';
 import { DomainProvider } from '@/context/DomainContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -20,13 +21,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <DomainProvider>
-          <EmailProvider>
-            <NavigationWrapper>
-                {children}
-            </NavigationWrapper>
-          </EmailProvider>
-        </DomainProvider>
+        <ThemeProvider>
+          <DomainProvider>
+            <EmailProvider>
+              <NavigationWrapper>
+                  {children}
+              </NavigationWrapper>
+            </EmailProvider>
+          </DomainProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

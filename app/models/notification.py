@@ -116,7 +116,8 @@ class Notification(db.Model):
         """Mark notification as read"""
         self.is_read = True
         self.updated_at = datetime.now(IST)
-        db.session.commit()
+        # Commit using the active domain-aware session
+        get_db_session().commit()
     
     def is_expired(self):
         """Check if notification has expired"""
@@ -158,7 +159,8 @@ class Notification(db.Model):
     @staticmethod
     def mark_all_as_read(user_id):
         """Mark all notifications as read for a user"""
-        notifications = get_db_session().query(Notification).filter_by(
+        session = get_db_session()
+        notifications = session.query(Notification).filter_by(
             user_id=user_id,
             is_read=False
         ).all()
@@ -167,18 +169,19 @@ class Notification(db.Model):
             notification.is_read = True
             notification.updated_at = datetime.now(IST)
         
-        db.session.commit()
+        session.commit()
         return len(notifications)
     
     @staticmethod
     def cleanup_expired():
         """Clean up expired notifications"""
-        expired = get_db_session().query(Notification).filter(
+        session = get_db_session()
+        expired = session.query(Notification).filter(
             Notification.expires_at < datetime.now(IST)
         ).all()
         
         for notification in expired:
-            db.session.delete(notification)
+            session.delete(notification)
         
-        db.session.commit()
+        session.commit()
         return len(expired)

@@ -37,6 +37,40 @@ const getApiUrl = (endpoint: string) => {
 
 const API_BASE_URL = getApiBaseUrl();
 
+// --- Global session-expired handling ---
+const dispatchSessionExpired = (detail?: { reason?: string; status?: number }) => {
+    if (typeof window === 'undefined') return;
+    try {
+        const event = new CustomEvent('session-expired', { detail });
+        window.dispatchEvent(event);
+    } catch {
+        // Fallback: dispatch a simple Event if CustomEvent is unavailable
+        window.dispatchEvent(new Event('session-expired'));
+    }
+};
+
+// Wrap window.fetch to catch 401 invalid/expired token responses across the app
+if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+        const response = await originalFetch(...args as Parameters<typeof originalFetch>);
+        if (response && response.status === 401) {
+            try {
+                // Clone to avoid locking the body for callers
+                const clone = response.clone();
+                const data = await clone.json().catch(() => ({} as any));
+                const message = (data && (data.message || data.error)) || '';
+                if (typeof message === 'string' && message.toLowerCase().includes('invalid or expired token')) {
+                    dispatchSessionExpired({ reason: 'token_expired', status: 401 });
+                }
+            } catch {
+                // Ignore JSON parsing issues
+            }
+        }
+        return response;
+    };
+}
+
 // Helper function to get auth headers with domain
 const getAuthHeaders = () => {
     const domain = getCurrentDomain();
@@ -96,7 +130,14 @@ axiosApi.interceptors.response.use(
             console.error('Response status:', error.response.status);
             
             if (error.response.status === 401) {
-                error.message = 'Authentication failed. Please check your Microsoft Graph configuration.';
+                try {
+                    const data: any = error.response.data || {};
+                    const message = (data.message || data.error || '').toString().toLowerCase();
+                    if (message.includes('invalid or expired token')) {
+                        dispatchSessionExpired({ reason: 'token_expired', status: 401 });
+                    }
+                } catch {}
+                error.message = 'Authentication failed. Please log in again.';
             }
         }
         return Promise.reject(error);

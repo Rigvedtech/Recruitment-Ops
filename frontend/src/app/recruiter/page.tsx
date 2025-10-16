@@ -304,7 +304,7 @@ const JDTrackerTable: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-6">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-6">
       <div className="container mx-auto px-4">
         {/* Header */}
         <div className="mb-6">
@@ -324,18 +324,18 @@ const JDTrackerTable: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white shadow-md rounded-lg overflow-hidden relative">
+        <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden relative">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">Job Requirements</h2>
           </div>
 
           {/* Advanced Filters */}
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             {/* Advanced Filters Toggle */}
             <div className="mb-4 flex items-center justify-between">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -364,16 +364,16 @@ const JDTrackerTable: React.FC = () => {
 
             {/* Advanced Filters Panel */}
             {showFilters && (
-              <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-lg">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   
                   {/* Status Filter */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Status</label>
                     <select
                       value={filters.status}
                       onChange={(e) => handleFilterChange('status', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All Statuses</option>
                       <option value="open">Open</option>
@@ -388,11 +388,11 @@ const JDTrackerTable: React.FC = () => {
 
                   {/* Company Filter */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Company</label>
                     <select
                       value={filters.company}
                       onChange={(e) => handleFilterChange('company', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All Companies</option>
                       {uniqueCompanies.map((company) => (
@@ -405,11 +405,11 @@ const JDTrackerTable: React.FC = () => {
 
                   {/* Job Title Filter */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Job Title</label>
                     <select
                       value={filters.jobTitle}
                       onChange={(e) => handleFilterChange('jobTitle', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All Job Titles</option>
                       {uniqueJobTitles.map((title) => (
@@ -422,11 +422,11 @@ const JDTrackerTable: React.FC = () => {
 
                   {/* Assigned To Filter */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Assigned To</label>
                     <select
                       value={filters.assignedTo}
                       onChange={(e) => handleFilterChange('assignedTo', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All Recruiters</option>
                       {uniqueAssignedTo.map((recruiter) => (
@@ -439,11 +439,11 @@ const JDTrackerTable: React.FC = () => {
 
                   {/* Priority Filter */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Priority</label>
                     <select
                       value={filters.priority}
                       onChange={(e) => handleFilterChange('priority', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All Priorities</option>
                       {uniquePriorities.map((priority) => (
@@ -457,10 +457,10 @@ const JDTrackerTable: React.FC = () => {
                 </div>
 
                 {/* Filter Action Buttons */}
-                <div className="flex justify-end space-x-3 mt-4 pt-4 border-t border-gray-200">
+                <div className="flex justify-end space-x-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <button
                     onClick={clearFilters}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
                   >
                     Clear Filters
                   </button>
@@ -475,7 +475,7 @@ const JDTrackerTable: React.FC = () => {
             )}
 
             {/* Results Summary */}
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 dark:text-gray-300">
               Showing {filteredRequirements.length} of {requirements.length} requirements
               {Object.values(appliedFilters).filter(filter => filter !== 'all').length > 0 && (
                 <span className="text-blue-600"> (filtered)</span>
@@ -494,26 +494,26 @@ const JDTrackerTable: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto relative z-0">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job Title</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Request ID</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Job Title</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Company</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Priority</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Assigned To</th>
               {user?.role === 'admin' && (
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Breached Time</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Breached Time</th>
               )}
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Profiles</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selected Profiles</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total Profiles</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Selected Profiles</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {filteredRequirements.map((requirement) => (
-                    <tr key={requirement.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <tr key={requirement.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleRequestIdClick(requirement.request_id)}
@@ -528,10 +528,10 @@ const JDTrackerTable: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-200">
                         {requirement.job_title}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-200">
                         {requirement.company_name}
                       </td>
                                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

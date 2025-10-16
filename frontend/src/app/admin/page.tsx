@@ -77,7 +77,7 @@ const AdminDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:bg-gray-900 dark:bg-none">
       <div className="container mx-auto px-6 py-8">
         {/* Header Section */}
         <div className="mb-12">
@@ -97,7 +97,7 @@ const AdminDashboard: React.FC = () => {
 
         {/* Primary Features Section - Most Used */}
         <div className="mb-12">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center">
+          <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6 flex items-center">
             <svg className="w-6 h-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
@@ -106,7 +106,7 @@ const AdminDashboard: React.FC = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Recruiter Activity - Prominent */}
-            <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 overflow-hidden">
               <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -131,19 +131,19 @@ const AdminDashboard: React.FC = () => {
                   ) : recruiterActivity ? (
                     <>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Today's Active Recruiters</span>
-                        <span className="text-lg font-semibold text-gray-900">
+                        <span className="text-gray-600 dark:text-gray-300">Today's Active Recruiters</span>
+                        <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                           {recruiterActivity.overall_stats.today_active_recruiters}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Profiles Submitted Today</span>
+                        <span className="text-gray-600 dark:text-gray-300">Profiles Submitted Today</span>
                         <span className="text-lg font-semibold text-green-600">
                           {recruiterActivity.overall_stats.today_profiles_submitted}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">This Week's Activity</span>
+                        <span className="text-gray-600 dark:text-gray-300">This Week's Activity</span>
                         <span className="text-lg font-semibold text-blue-600">
                           {recruiterActivity.overall_stats.weekly_profiles_submitted} profiles
                         </span>
@@ -165,7 +165,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Requirements Activity - Prominent */}
-            <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 overflow-hidden">
               <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -186,19 +186,19 @@ const AdminDashboard: React.FC = () => {
                   {requirementsActivity ? (
                     <>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Total RFH</span>
-                        <span className="text-lg font-semibold text-gray-900">
+                        <span className="text-gray-600 dark:text-gray-300">Total RFH</span>
+                        <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                           {requirementsActivity.total_rfh}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Today's Active Requirements</span>
+                        <span className="text-gray-600 dark:text-gray-300">Today's Active Requirements</span>
                         <span className="text-lg font-semibold text-green-600">
                           {requirementsActivity.today_active_requirements}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">This Week's Activity</span>
+                        <span className="text-gray-600 dark:text-gray-300">This Week's Activity</span>
                         <span className="text-lg font-semibold text-blue-600">
                           {requirementsActivity.weekly_active_requirements} requirements
                         </span>
@@ -223,7 +223,7 @@ const AdminDashboard: React.FC = () => {
 
         {/* Secondary Features Section - Less Frequently Used */}
         <div className="mb-12">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center">
+          <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6 flex items-center">
             <svg className="w-6 h-6 text-gray-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
@@ -232,7 +232,7 @@ const AdminDashboard: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* RFH Management */}
-            <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 dark:border-gray-700">
               <div className="p-6">
                 <div className="flex items-center mb-4">
                   <div className="bg-blue-100 rounded-lg p-3">
@@ -241,13 +241,13 @@ const AdminDashboard: React.FC = () => {
                     </svg>
                   </div>
                   <div className="ml-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Assign Requirement</h3>
-                    <p className="text-sm text-gray-600">Assign and Manage requests</p>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Assign Requirement</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Assign and Manage requests</p>
                   </div>
                 </div>
                 <button
                   onClick={() => router.push('/admin/rfh')}
-                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
+                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium dark:bg-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-600 dark:border dark:border-gray-500"
                 >
                   View RFH
                 </button>
@@ -255,7 +255,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Add Requirement */}
-            <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 dark:border-gray-700">
               <div className="p-6">
                 <div className="flex items-center mb-4">
                   <div className="bg-green-100 rounded-lg p-3">
@@ -264,13 +264,13 @@ const AdminDashboard: React.FC = () => {
                     </svg>
                   </div>
                   <div className="ml-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Add Requirement</h3>
-                    <p className="text-sm text-gray-600">Create new job</p>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Add Requirement</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Create new job</p>
                   </div>
                 </div>
                 <button
                   onClick={() => router.push('/admin/add-requirement')}
-                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
+                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium dark:bg-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-600 dark:border dark:border-gray-500"
                 >
                   Create Requirement
                 </button>
@@ -278,7 +278,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Email Processing */}
-            <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 dark:border-gray-700">
               <div className="p-6">
                 <div className="flex items-center mb-4">
                   <div className="bg-purple-100 rounded-lg p-3">
@@ -287,13 +287,13 @@ const AdminDashboard: React.FC = () => {
                     </svg>
                   </div>
                   <div className="ml-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Email Processing</h3>
-                    <p className="text-sm text-gray-600">Monitor emails</p>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Email Processing</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Monitor emails</p>
                   </div>
                 </div>
                 <button
                   onClick={() => router.push('/email-dashboard')}
-                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
+                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium dark:bg-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-600 dark:border dark:border-gray-500"
                 >
                   View Dashboard
                 </button>
@@ -306,7 +306,7 @@ const AdminDashboard: React.FC = () => {
 
         {/* Requirement Tables Section */}
         <div className="mb-12">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center">
+          <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6 flex items-center">
             <svg className="w-6 h-6 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
@@ -330,7 +330,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <button
                   onClick={() => router.push('/tracker')}
-                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
+                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium dark:bg-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-600 dark:border dark:border-gray-500"
                 >
                   View Tracker
                 </button>
@@ -353,7 +353,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <button
                   onClick={() => router.push('/recruiter')}
-                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
+                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium dark:bg-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-600 dark:border dark:border-gray-500"
                 >
                   View Recruiters
                 </button>
@@ -374,7 +374,7 @@ const AdminDashboard: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* SLA Configuration */}
-            <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 dark:border-gray-700">
               <div className="p-5">
                 <div className="flex items-center mb-3">
                   <div className="bg-orange-100 rounded-lg p-2">
@@ -383,13 +383,13 @@ const AdminDashboard: React.FC = () => {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <h3 className="text-base font-medium text-gray-900">SLA Configuration</h3>
-                    <p className="text-xs text-gray-500">Time limits</p>
+                    <h3 className="text-base font-medium text-gray-900 dark:text-gray-100">SLA Configuration</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-300">Time limits</p>
                   </div>
                 </div>
                 <button
                   onClick={() => router.push('/admin/sla-config')}
-                  className="w-full bg-gray-50 text-gray-600 py-2 px-3 rounded-md hover:bg-gray-100 transition-colors duration-200 text-sm"
+                  className="w-full bg-gray-50 text-gray-600 py-2 px-3 rounded-md hover:bg-gray-100 transition-colors duration-200 text-sm dark:bg-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-600 dark:border dark:border-gray-500"
                 >
                   Configure SLA
                 </button>
@@ -397,7 +397,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Analytics */}
-            <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 dark:border-gray-700">
               <div className="p-5">
                 <div className="flex items-center mb-3">
                   <div className="bg-yellow-100 rounded-lg p-2">
@@ -406,13 +406,13 @@ const AdminDashboard: React.FC = () => {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <h3 className="text-base font-medium text-gray-900">Analytics</h3>
-                    <p className="text-xs text-gray-500">Reports</p>
+                    <h3 className="text-base font-medium text-gray-900 dark:text-gray-100">Analytics</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-300">Reports</p>
                   </div>
                 </div>
                 <button
                   onClick={() => router.push('/admin/analytics')}
-                  className="w-full bg-gray-50 text-gray-600 py-2 px-3 rounded-md hover:bg-gray-100 transition-colors duration-200 text-sm"
+                  className="w-full bg-gray-50 text-gray-600 py-2 px-3 rounded-md hover:bg-gray-100 transition-colors duration-200 text-sm dark:bg-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-600 dark:border dark:border-gray-500"
                 >
                   View Reports
                 </button>
@@ -420,7 +420,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {/* SLA Dashboard */}
-            <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 dark:border-gray-700">
               <div className="p-5">
                 <div className="flex items-center mb-3">
                   <div className="bg-red-100 rounded-lg p-2">
@@ -429,13 +429,13 @@ const AdminDashboard: React.FC = () => {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <h3 className="text-base font-medium text-gray-900">SLA Dashboard</h3>
-                    <p className="text-xs text-gray-500">Performance</p>
+                    <h3 className="text-base font-medium text-gray-900 dark:text-gray-100">SLA Dashboard</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-300">Performance</p>
                   </div>
                 </div>
                 <button
                   onClick={() => router.push('/sla-dashboard')}
-                  className="w-full bg-gray-50 text-gray-600 py-2 px-3 rounded-md hover:bg-gray-100 transition-colors duration-200 text-sm"
+                  className="w-full bg-gray-50 text-gray-600 py-2 px-3 rounded-md hover:bg-gray-100 transition-colors duration-200 text-sm dark:bg-gray-700/60 dark:text-gray-200 dark:hover:bg-gray-600 dark:border dark:border-gray-500"
                 >
                   View SLA
                 </button>
@@ -445,8 +445,8 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Quick Actions Footer */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Miscellaneous</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Miscellaneous</h3>
           <div className="flex flex-wrap gap-3">
             {/* <button
               onClick={() => router.push('/tracker')}
