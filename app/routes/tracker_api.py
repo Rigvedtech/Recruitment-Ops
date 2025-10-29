@@ -1708,14 +1708,14 @@ def get_profiles_count():
         if requirement_ids:
             # OPTIMIZATION 1: Batch fetch profile counts using a single query with aggregation
             from sqlalchemy import func, case
-            from app.models.profile import StatusEnum
+            from app.models.profile import ProfileStatusEnum
             
             profile_counts_query = get_db_session().query(
                 Profile.requirement_id,
                 func.count(Profile.profile_id).label('total_count'),
                 func.sum(
                     case(
-                        (Profile.status == StatusEnum.onboarded, 1),
+                        (Profile.status == ProfileStatusEnum.onboarded, 1),
                         else_=0
                     )
                 ).label('onboarded_count')

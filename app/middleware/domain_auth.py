@@ -156,6 +156,15 @@ def require_domain_auth(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Allow OPTIONS requests through without authentication (for CORS preflight)
+        if request.method == 'OPTIONS':
+            from flask import make_response
+            response = make_response('', 200)
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Original-Domain, X-Domain'
+            return response
+            
         try:
             # Get domain from custom header or fallback to detection
             domain = request.headers.get('X-Original-Domain')
