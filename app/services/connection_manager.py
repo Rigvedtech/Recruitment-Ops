@@ -61,16 +61,17 @@ class DatabaseConnectionManager:
             
             try:
                 # Create database URL
-                db_url = self.get_database_url(postgres_creds)
+                db_url = self.get_database_url(postgres_creds)   
                 
                 # Create engine with connection pooling
                 engine = create_engine(
                     db_url,
                     poolclass=QueuePool,
-                    pool_size=10,
-                    max_overflow=20,
-                    pool_pre_ping=True,
-                    pool_recycle=3600,  # Recycle connections after 1 hour
+                    pool_size=15,       # requests per domain
+                    max_overflow=25,    # allows temporary expansion under load
+                    pool_timeout=60,   # wait time for a connection to be established   (default 30 seconds)
+                    pool_recycle=600,  # Recycle connections after 2 hour
+                    pool_pre_ping=True,  # check if connection is still valid before use
                     echo=False  # Set to True for SQL debugging
                 )
                 

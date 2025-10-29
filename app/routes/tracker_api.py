@@ -9,6 +9,7 @@ from app.database import db
 from datetime import datetime
 import re
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from app.services.email_processor import EmailProcessor
 from app.middleware.domain_auth import require_domain_auth
 from app.middleware.redis_performance_middleware import cache_response, invalidate_cache_pattern
@@ -320,23 +321,34 @@ def get_tracker_requirements():
         
         # Get manual requirements (these should always be included regardless of email subject)
         # Exclude project requirements from main tracker and soft-deleted requirements
-        manual_query = get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(
-            Requirement.requirement_id.isnot(None),
-            Requirement.is_manual_requirement == True
-        )
+        manual_query = get_db_session().query(Requirement)\
+            .options(
+                joinedload(Requirement.email_details),
+                joinedload(Requirement.assignments)
+            )\
+            .filter(Requirement.deleted_at.is_(None))\
+            .filter(
+                Requirement.requirement_id.isnot(None),
+                Requirement.is_manual_requirement == True
+            )
         
         # Get automatic requirements (email-based) with existing filters, excluding soft-deleted
         from app.models.email_details import EmailDetails
-        automatic_query = get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).join(
-            EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id
-        ).filter(
-            Requirement.requirement_id.isnot(None),
-            Requirement.is_manual_requirement == False,
-            ~EmailDetails.email_subject.like('Re:%'),
-            ~EmailDetails.email_subject.like('Fw:%'),
-            ~EmailDetails.email_subject.like('Fwd:%'),
-            ~EmailDetails.email_subject.like('Forward:%')
-        )
+        automatic_query = get_db_session().query(Requirement)\
+            .options(
+                joinedload(Requirement.email_details),
+                joinedload(Requirement.assignments)
+            )\
+            .filter(Requirement.deleted_at.is_(None))\
+            .join(EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id)\
+            .filter(
+                Requirement.requirement_id.isnot(None),
+                Requirement.is_manual_requirement == False,
+                ~EmailDetails.email_subject.like('Re:%'),
+                ~EmailDetails.email_subject.like('Fw:%'),
+                ~EmailDetails.email_subject.like('Fwd:%'),
+                ~EmailDetails.email_subject.like('Forward:%')
+            )
         
         # Apply role-based filtering to both manual and automatic requirements
         if current_user and getattr(current_user.role, 'value', None) == 'recruiter':
@@ -374,10 +386,6 @@ def get_tracker_requirements():
         requirements = manual_requirements + automatic_requirements
         
         current_app.logger.info(f"Found {len(manual_requirements)} manual requirements and {len(automatic_requirements)} automatic requirements")
-        for req in manual_requirements:
-            current_app.logger.info(f"Manual requirement: {req.requirement_id} - {req.job_title}")
-        for req in automatic_requirements:
-            current_app.logger.info(f"Automatic requirement: {req.requirement_id} - {req.job_title}")
 
         # Group by thread_id if present, else by normalized subject
         thread_groups = {}
@@ -396,13 +404,7 @@ def get_tracker_requirements():
                 thread_groups[group_key] = []
             thread_groups[group_key].append(req)
 
-        current_app.logger.info(f"Total groups: {len(thread_groups)}")
-        for group_key, group in thread_groups.items():
-            current_app.logger.info(f"Group key: {group_key} | Emails in group: {len(group)}")
-            for req in group:
-                email_subject = req.email_details[0].email_subject if req.email_details else 'No subject'
-                thread_id = req.email_details[0].thread_id if req.email_details else 'No thread'
-                current_app.logger.info(f"  - Email ID: {req.requirement_id}, Subject: {email_subject}, Thread ID: {thread_id}")
+        current_app.logger.info(f"Grouped into {len(thread_groups)} thread groups")
 
         result = []
         for group_key, group in thread_groups.items():
@@ -1042,6 +1044,7 @@ def get_archived_requirements():
         return jsonify({'error': 'Failed to fetch archived requirements'}), 500
 
 @tracker_bp.route('/stats', methods=['GET'])
+@cache_response(ttl=300)  # Cache for 5 minutes
 def get_tracker_stats():
     """Get tracker statistics"""
     try:
@@ -1620,8 +1623,9 @@ def get_emails_for_request(request_id):
         return jsonify({'error': 'Failed to fetch emails'}), 500 
 
 @tracker_bp.route('/profiles-count', methods=['GET'])
+@cache_response(ttl=120, key_prefix='tracker_profiles_count')  # Cache for 2 minutes
 def get_profiles_count():
-    """Get profile counts for all tracker requirements"""
+    """Get profile counts for all tracker requirements - OPTIMIZED + CACHED"""
     try:
         # Get user from request headers for role-based filtering
         auth_header = request.headers.get('Authorization')
@@ -1697,32 +1701,116 @@ def get_profiles_count():
             current_app.logger.info(f"Manual requirement in profiles-count: {req.requirement_id} - {req.job_title} (assigned_to: {req.user_id})")
         for req in automatic_requirements:
             current_app.logger.info(f"Automatic requirement in profiles-count: {req.requirement_id} - {req.job_title} (assigned_to: {req.user_id})")
-        result = []
         
-        for req in requirements:
-            # Get profiles linked to this requirement
-            try:
-                profiles = get_db_session().query(Profile).filter(
-                    Profile.requirement_id == req.requirement_id,
-                    Profile.deleted_at.is_(None)
-                ).all()
-                profile_count = len(profiles)
-                # Calculate onboarded count from profile status
-                onboarded_count = len([p for p in profiles if p.status and p.status.value == 'onboarded'])
-            except Exception as profile_error:
-                current_app.logger.warning(f"Error loading profiles for requirement {req.requirement_id}: {str(profile_error)}")
-                # Fallback: use raw SQL to count profiles
-                from sqlalchemy import text
-                count_result = get_db_session().execute(text("""
-                    SELECT COUNT(*) as count 
-                    FROM profiles 
-                    WHERE requirement_id = :req_id AND deleted_at IS NULL
-                """), {"req_id": str(req.requirement_id)})
-                profile_count = count_result.scalar() or 0
-                onboarded_count = 0  # Set to 0 as fallback
+        # OPTIMIZATION: Batch fetch all related data to avoid N+1 queries
+        requirement_ids = [req.requirement_id for req in requirements]
+        
+        if requirement_ids:
+            # OPTIMIZATION 1: Batch fetch profile counts using a single query with aggregation
+            from sqlalchemy import func, case
+            from app.models.profile import StatusEnum
             
-            # Get breach time display
-            breach_time_display = get_breach_time_display(req.requirement_id)
+            profile_counts_query = get_db_session().query(
+                Profile.requirement_id,
+                func.count(Profile.profile_id).label('total_count'),
+                func.sum(
+                    case(
+                        (Profile.status == StatusEnum.onboarded, 1),
+                        else_=0
+                    )
+                ).label('onboarded_count')
+            ).filter(
+                Profile.requirement_id.in_(requirement_ids),
+                Profile.deleted_at.is_(None)
+            ).group_by(Profile.requirement_id).all()
+            
+            # Create lookup dictionaries for O(1) access
+            profile_counts_map = {
+                str(row.requirement_id): {
+                    'total': row.total_count or 0,
+                    'onboarded': row.onboarded_count or 0
+                }
+                for row in profile_counts_query
+            }
+            
+            # OPTIMIZATION 2: Batch fetch assigned recruiters using a single query
+            from app.models.assignment import Assignment
+            assignments_query = get_db_session().query(
+                Assignment.requirement_id,
+                User.username,
+                User.role
+            ).join(
+                User, Assignment.user_id == User.user_id
+            ).filter(
+                Assignment.requirement_id.in_(requirement_ids),
+                Assignment.is_active == True,
+                User.role == 'recruiter'
+            ).all()
+            
+            # Create lookup dictionary for assigned recruiters
+            assigned_recruiters_map = {}
+            for row in assignments_query:
+                req_id_str = str(row.requirement_id)
+                if req_id_str not in assigned_recruiters_map:
+                    assigned_recruiters_map[req_id_str] = []
+                assigned_recruiters_map[req_id_str].append(row.username)
+            
+            # OPTIMIZATION 3: Batch fetch breach times using a single query
+            from app.models.sla_tracker import SLATracker, SLAStatusEnum
+            from sqlalchemy.sql import func as sqlfunc
+            
+            # Subquery to get the max breach hours for each requirement
+            max_breach_subquery = get_db_session().query(
+                SLATracker.requirement_id,
+                sqlfunc.max(SLATracker.sla_breach_hours).label('max_breach_hours')
+            ).filter(
+                SLATracker.requirement_id.in_(requirement_ids),
+                SLATracker.sla_status == SLAStatusEnum.breached
+            ).group_by(SLATracker.requirement_id).subquery()
+            
+            # Get the actual breach records
+            breach_query = get_db_session().query(
+                SLATracker.requirement_id,
+                SLATracker.sla_breach_hours
+            ).join(
+                max_breach_subquery,
+                (SLATracker.requirement_id == max_breach_subquery.c.requirement_id) &
+                (SLATracker.sla_breach_hours == max_breach_subquery.c.max_breach_hours)
+            ).filter(
+                SLATracker.sla_status == SLAStatusEnum.breached
+            ).all()
+            
+            # Create lookup dictionary for breach times
+            breach_times_map = {}
+            for row in breach_query:
+                req_id_str = str(row.requirement_id)
+                if row.sla_breach_hours:
+                    breach_hours = row.sla_breach_hours
+                    breach_days = breach_hours / 24
+                    breach_days_rounded = round(breach_days, 1)
+                    
+                    # Format breach time as "X days" or "X hours" if less than 1 day
+                    if breach_days_rounded >= 1:
+                        breach_times_map[req_id_str] = f"{int(breach_days_rounded)} days"
+                    else:
+                        breach_times_map[req_id_str] = f"{int(breach_hours)} hours"
+        else:
+            profile_counts_map = {}
+            assigned_recruiters_map = {}
+            breach_times_map = {}
+        
+        # Build result using pre-fetched data (no more N+1 queries!)
+        result = []
+        for req in requirements:
+            req_id_str = str(req.requirement_id)
+            
+            # Get profile counts from pre-fetched data
+            counts = profile_counts_map.get(req_id_str, {'total': 0, 'onboarded': 0})
+            profile_count = counts['total']
+            onboarded_count = counts['onboarded']
+            
+            # Get breach time from pre-fetched data
+            breach_time_display = breach_times_map.get(req_id_str, None)
             
             req_dict = req.to_dict()
             req_dict['profiles_count'] = profile_count
@@ -1730,9 +1818,9 @@ def get_profiles_count():
             req_dict['selected_profiles_count'] = onboarded_count  # Add selected_profiles_count for consistency
             req_dict['breach_time_display'] = breach_time_display
             
-            # Add assignment information that frontend expects
+            # Add assignment information from pre-fetched data
             req_dict['assigned_to'] = _get_assigned_user_display(req.user_id)
-            req_dict['assigned_recruiters'] = _get_assigned_recruiters_display(req.requirement_id, session=get_db_session())
+            req_dict['assigned_recruiters'] = assigned_recruiters_map.get(req_id_str, [])
             
             # Check if this is a new assignment (updated within 24 hours and current user is assigned)
             is_new_assignment = False
@@ -1760,6 +1848,8 @@ def get_profiles_count():
         return jsonify({'requirements': result})
     except Exception as e:
         current_app.logger.error(f"Error fetching requirements with profile counts: {str(e)}")
+        import traceback
+        current_app.logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': 'Failed to fetch requirements with profile counts'}), 500
 
 @tracker_bp.route('/onboarding-status', methods=['POST'])
@@ -1831,6 +1921,7 @@ def close_requirement(request_id):
         return jsonify({'success': False, 'message': 'Failed to close requirement'}), 500
 
 @tracker_bp.route('/closed', methods=['GET'])
+@cache_response(ttl=600)  # Cache for 10 minutes
 def get_closed_requirements():
     """Get all closed requirements with metrics"""
     try:

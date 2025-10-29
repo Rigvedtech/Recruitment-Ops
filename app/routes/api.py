@@ -1766,8 +1766,18 @@ def login():
                 'message': 'Invalid username or password'
             }), 401
         
-        # Create JWT token
-        access_token = create_access_token(identity=username)
+        # Create JWT token with additional claims for stateless validation
+        # This allows JWT validation without database queries
+        access_token = create_access_token(
+            identity=username,
+            additional_claims={
+                'domain': domain,
+                'role': user.role.value if hasattr(user.role, 'value') else user.role,
+                'user_id': str(user.user_id) if user.user_id else None,
+                'email': user.email,
+                'full_name': user.full_name
+            }
+        )
         
         current_app.logger.info(f"Login successful for user: {username}")
         return jsonify({
@@ -2781,8 +2791,18 @@ def recruiter_login():
                 'message': 'Invalid username or password'
             }), 401
         
-        # Create JWT token
-        access_token = create_access_token(identity=username)
+        # Create JWT token with additional claims for stateless validation
+        # This allows JWT validation without database queries
+        access_token = create_access_token(
+            identity=username,
+            additional_claims={
+                'domain': domain,
+                'role': user.role.value if hasattr(user.role, 'value') else user.role,
+                'user_id': str(user.user_id) if user.user_id else None,
+                'email': user.email,
+                'full_name': user.full_name
+            }
+        )
         
         return jsonify({
             'status': 'success',
@@ -3126,6 +3146,7 @@ def get_meet_links(request_id):
         }), 500
 
 @api_bp.route('/get-enum-values', methods=['GET'])
+@cache_response(ttl=3600)  # Cache for 1 hour (enum values rarely change)
 def get_enum_values():
     """Get all enum values for a specific enum type"""
     try:
@@ -3258,6 +3279,8 @@ def add_enum_value():
         return jsonify({'error': f'Failed to add enum value: {str(e)}'}), 500
 
 @api_bp.route('/recruiter-activity', methods=['GET'])
+@require_domain_auth
+@cache_response(ttl=300)  # Cache for 5 minutes
 def get_recruiter_activity():
     """Get daily recruiter activity data"""
     try:
@@ -3277,6 +3300,24 @@ def get_recruiter_activity():
         # Get all recruiters - only fetch username
         recruiter_usernames = [r[0] for r in get_db_session().query(User.username).filter_by(role='recruiter').all()]
         
+        # PERFORMANCE OPTIMIZATION: Fetch requirement-recruiter mapping ONCE (outside the daily loop)
+        # Use JOIN to get all requirements with their assigned recruiters in a single query
+        requirements_with_users = get_db_session().query(
+            Requirement.requirement_id,
+            User.username
+        ).join(
+            User, 
+            Requirement.user_id == User.user_id
+        ).filter(
+            User.role == 'recruiter'
+        ).all()
+        
+        # Create a mapping of requirement_id to assigned recruiters
+        requirement_recruiters = {}
+        for req_id, username in requirements_with_users:
+            if username:
+                requirement_recruiters[str(req_id)] = [username]
+        
         # Get daily activity data
         daily_activity = []
         current_date = start_date
@@ -3292,21 +3333,6 @@ def get_recruiter_activity():
             ).filter(
                 func.date(Profile.created_at) == current_date
             ).all()
-            
-            # Get all requirements and their assigned recruiters
-            all_requirements = get_db_session().query(
-                Requirement.requirement_id,
-                Requirement.user_id
-            ).all()
-            
-            # Create a mapping of requirement_id to assigned recruiters
-            requirement_recruiters = {}
-            for req in all_requirements:
-                if req.user_id:
-                    # Get the user (recruiter) assigned to this requirement - only fetch username
-                    username = get_db_session().query(User.username).filter_by(user_id=req.user_id).scalar()
-                    if username:
-                        requirement_recruiters[str(req.requirement_id)] = [username]
             
             # Create a mapping of profile_id to requirement_id using the new schema
             profile_to_requirement = {}
@@ -3443,6 +3469,7 @@ def get_recruiter_activity():
 
 @api_bp.route('/requirements-activity', methods=['GET'])
 @require_domain_auth
+@cache_response(ttl=300)  # Cache for 5 minutes
 def get_requirements_activity():
     """Get requirements activity data"""
     try:

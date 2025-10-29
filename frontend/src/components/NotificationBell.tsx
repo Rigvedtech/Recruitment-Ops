@@ -14,8 +14,8 @@ interface NotificationData {
 }
 
 interface Notification {
-  id: number;
-  user_id: number;
+  notification_id: string;  // Changed from id: number to match backend
+  user_id: string;          // Changed from number to string (UUID)
   type: string;
   title: string;
   message: string;
@@ -28,7 +28,7 @@ interface Notification {
 
 interface UserNotificationGroup {
   user: {
-    id: number;
+    id: string;  // Changed from number to string (UUID)
     username: string;
     role: string;
   };
@@ -205,7 +205,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
   };
 
   // Mark notification as read
-  const markAsRead = async (notificationId: number) => {
+  const markAsRead = async (notificationId: string) => {
     // Safety check: ensure user and user_id are available
     if (!user || !user.user_id) {
       console.warn('Cannot mark notification as read: user or user_id is not available');
@@ -230,7 +230,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
         // Update local state
         setNotifications(prev => 
           prev.map(notif => 
-            notif.id === notificationId 
+            notif.notification_id === notificationId 
               ? { ...notif, is_read: true }
               : notif
           )
@@ -412,11 +412,11 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
               <div className="divide-y divide-gray-100">
                 {notifications.map((notification) => (
                   <div
-                    key={notification.id}
+                    key={notification.notification_id}
                     className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
                       !notification.is_read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                     }`}
-                    onClick={() => !notification.is_read && markAsRead(notification.id)}
+                    onClick={() => !notification.is_read && markAsRead(notification.notification_id)}
                   >
                     <div className="flex items-start space-x-3">
                       <span className="text-lg flex-shrink-0 mt-0.5">
@@ -439,7 +439,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
                           <div className="flex items-center mt-1">
                             <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full font-medium">
                               {userNotificationGroups.find(group => 
-                                group.notifications.some(n => n.id === notification.id)
+                                group.notifications.some(n => n.notification_id === notification.notification_id)
                               )?.user.username || 'Unknown User'}
                             </span>
                           </div>

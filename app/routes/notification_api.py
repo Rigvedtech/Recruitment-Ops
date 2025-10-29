@@ -5,6 +5,7 @@ from app.models.user import User
 from app.models.notification import Notification
 from app.database import db
 from app.middleware.domain_auth import require_domain_auth
+from app.middleware.redis_performance_middleware import cache_response
 
 def get_db_session():
     """
@@ -137,12 +138,8 @@ def mark_notification_read(notification_id):
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists - only fetch user_id
-        actual_user_id = get_db_session().query(User.user_id).filter_by(user_id=user_id).scalar()
-        if not actual_user_id:
-            return jsonify({'error': 'User not found'}), 404
-
-        success = NotificationService.mark_notification_as_read(notification_id, actual_user_id)
+        # Let the service handle user validation and notification marking
+        success = NotificationService.mark_notification_as_read(notification_id, user_id)
         
         if success:
             return jsonify({
@@ -168,12 +165,8 @@ def mark_all_notifications_read():
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Validate user exists - only fetch user_id
-        actual_user_id = get_db_session().query(User.user_id).filter_by(user_id=user_id).scalar()
-        if not actual_user_id:
-            return jsonify({'error': 'User not found'}), 404
-
-        success = NotificationService.mark_all_as_read(actual_user_id)
+        # Let the service handle user validation and marking
+        success = NotificationService.mark_all_as_read(user_id)
         
         if success:
             return jsonify({
@@ -181,7 +174,7 @@ def mark_all_notifications_read():
                 'message': 'All notifications marked as read'
             })
         else:
-            return jsonify({'error': 'Failed to mark notifications as read'}), 500
+            return jsonify({'error': 'User not found or failed to mark notifications as read'}), 404
             
     except Exception as e:
         current_app.logger.error(f"Error marking all notifications as read: {str(e)}")
@@ -307,6 +300,7 @@ def trigger_sla_notifications():
 
 @notification_bp.route('/admin/all', methods=['GET'])
 @require_domain_auth
+@cache_response(ttl=60)  # Cache for 1 minute
 def get_all_notifications_admin():
     """Get all notifications for admin dashboard"""
     try:

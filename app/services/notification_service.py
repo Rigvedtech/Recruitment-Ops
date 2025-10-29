@@ -468,13 +468,14 @@ class NotificationService:
             
             if user_role and user_role.value == 'admin':
                 # Admin marks ALL unread notifications as read (from all users)
-                all_unread_notifications = get_db_session().query(Notification).filter_by(is_read=False).all()
+                session = get_db_session()
+                all_unread_notifications = session.query(Notification).filter_by(is_read=False).all()
                 count = 0
                 for notification in all_unread_notifications:
                     notification.is_read = True
                     notification.updated_at = datetime.now(IST)
                     count += 1
-                db.session.commit()
+                session.commit()
                 current_app.logger.info(f"Admin marked {count} notifications as read from all users")
             else:
                 # Regular user marks only their own notifications as read

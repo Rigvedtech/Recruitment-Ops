@@ -25,6 +25,8 @@ venv/
 .venv/
 instance/
 *.db
+*.txt
+
 
 # Flask
 instance/

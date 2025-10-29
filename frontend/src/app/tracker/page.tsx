@@ -166,7 +166,7 @@ const TrackerPage: React.FC = () => {
       localStorage.removeItem('user')
       router.push('/login')
     }
-  }, [router])
+  }, []) // Fixed: Removed router dependency to prevent duplicate API calls
 
 
 

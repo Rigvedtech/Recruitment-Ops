@@ -981,7 +981,7 @@ export default function RecruiterWorkflowPage() {
     }
   };
 
-  const handleRound2Select = (studentId: string) => {
+  const handleRound2Select = async (studentId: string) => {
     if (round2Selected.has(studentId)) {
       // If already selected, remove from selection (undo)
       setRound2Selected(prev => {
@@ -1007,13 +1007,27 @@ export default function RecruiterWorkflowPage() {
         newSet.delete(studentId);
         return newSet;
       });
+      
+      // Update API
+      try {
+        await api.post('/workflow-step', {
+          request_id: requestId,
+          step: 'interview_round_2',
+          profile_ids: [studentId],
+          status: 'select',
+          user_id: currentUser?.user_id
+        });
+      } catch (error) {
+        console.error('Failed to update round 2 status:', error);
+      }
+      
       updateStepTimestamp(studentId, 'round2_selected');
       removeStepTimestamp(studentId, 'round2_rejected');
       removeStepTimestamp(studentId, 'round2_rescheduled');
     }
   };
 
-  const handleRound2Reject = (studentId: string) => {
+  const handleRound2Reject = async (studentId: string) => {
     if (round2Rejected.has(studentId)) {
       // If already rejected, remove from rejection (undo)
       setRound2Rejected(prev => {
@@ -1039,6 +1053,20 @@ export default function RecruiterWorkflowPage() {
         newSet.delete(studentId);
         return newSet;
       });
+      
+      // Update API
+      try {
+        await api.post('/workflow-step', {
+          request_id: requestId,
+          step: 'interview_round_2',
+          profile_ids: [studentId],
+          status: 'reject',
+          user_id: currentUser?.user_id
+        });
+      } catch (error) {
+        console.error('Failed to update round 2 status:', error);
+      }
+      
       updateStepTimestamp(studentId, 'round2_rejected');
       removeStepTimestamp(studentId, 'round2_selected');
       removeStepTimestamp(studentId, 'round2_rescheduled');
@@ -3775,7 +3803,7 @@ export default function RecruiterWorkflowPage() {
               </div>
             </div>
             
-            {screeningSelected.size === 0 ? (
+            {screeningSelected.size === 0 && interviewScheduled.size === 0 && interviewRescheduled.size === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <p className="text-lg">No candidates selected for interview scheduling.</p>
                 <button
@@ -3799,7 +3827,7 @@ export default function RecruiterWorkflowPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {profiles.filter(profile => screeningSelected.has(profile.student_id)).map((profile) => (
+                    {profiles.filter(profile => screeningSelected.has(profile.student_id) || interviewScheduled.has(profile.student_id) || interviewRescheduled.has(profile.student_id)).map((profile) => (
                       <tr key={profile.student_id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {profile.candidate_name}
@@ -3974,7 +4002,7 @@ export default function RecruiterWorkflowPage() {
               </div>
             </div>
             
-            {interviewScheduled.size === 0 ? (
+            {interviewScheduled.size === 0 && round1Selected.size === 0 && round1Rejected.size === 0 && round1Rescheduled.size === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <p className="text-lg">No candidates scheduled for interview.</p>
                 <button
@@ -3998,7 +4026,7 @@ export default function RecruiterWorkflowPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {profiles.filter(profile => interviewScheduled.has(profile.student_id)).map((profile) => (
+                    {profiles.filter(profile => interviewScheduled.has(profile.student_id) || round1Selected.has(profile.student_id) || round1Rejected.has(profile.student_id) || round1Rescheduled.has(profile.student_id)).map((profile) => (
                       <tr key={profile.student_id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {profile.candidate_name}
@@ -4190,7 +4218,7 @@ export default function RecruiterWorkflowPage() {
               </div>
             </div>
             
-            {round1Selected.size === 0 ? (
+            {round1Selected.size === 0 && round2Selected.size === 0 && round2Rejected.size === 0 && round2Rescheduled.size === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <p className="text-lg">No candidates selected from Round 1.</p>
                 <button
@@ -4214,7 +4242,7 @@ export default function RecruiterWorkflowPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {profiles.filter(profile => round1Selected.has(profile.student_id)).map((profile) => (
+                    {profiles.filter(profile => round1Selected.has(profile.student_id) || round2Selected.has(profile.student_id) || round2Rejected.has(profile.student_id) || round2Rescheduled.has(profile.student_id)).map((profile) => (
                       <tr key={profile.student_id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {profile.candidate_name}
@@ -4406,7 +4434,7 @@ export default function RecruiterWorkflowPage() {
               </div>
             </div>
             
-            {round2Selected.size === 0 ? (
+            {round2Selected.size === 0 && offered.size === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <p className="text-lg">No candidates selected from Round 2.</p>
                 <button
@@ -4429,7 +4457,7 @@ export default function RecruiterWorkflowPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {profiles.filter(profile => round2Selected.has(profile.student_id)).map((profile) => (
+                    {profiles.filter(profile => round2Selected.has(profile.student_id) || offered.has(profile.student_id)).map((profile) => (
                       <tr key={profile.student_id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {profile.candidate_name}
@@ -4534,7 +4562,7 @@ export default function RecruiterWorkflowPage() {
               </div>
             </div>
             
-            {offered.size === 0 ? (
+            {offered.size === 0 && onboarding.size === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <p className="text-lg">No candidates offered yet.</p>
                 <button
@@ -4557,7 +4585,7 @@ export default function RecruiterWorkflowPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {profiles.filter(profile => offered.has(profile.student_id)).map((profile) => (
+                    {profiles.filter(profile => offered.has(profile.student_id) || onboarding.has(profile.student_id)).map((profile) => (
                       <tr key={profile.student_id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {profile.candidate_name}
