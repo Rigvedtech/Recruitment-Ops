@@ -104,12 +104,18 @@ export default function RecruiterWorkflowPage() {
   const [interviewRescheduled, setInterviewRescheduled] = useState<Set<string>>(new Set());
   const [round1Selected, setRound1Selected] = useState<Set<string>>(new Set());
   const [round1Rejected, setRound1Rejected] = useState<Set<string>>(new Set());
+  const [round1BackedOut, setRound1BackedOut] = useState<Set<string>>(new Set());
   const [round1Rescheduled, setRound1Rescheduled] = useState<Set<string>>(new Set());
   const [round2Selected, setRound2Selected] = useState<Set<string>>(new Set());
   const [round2Rejected, setRound2Rejected] = useState<Set<string>>(new Set());
+  const [round2BackedOut, setRound2BackedOut] = useState<Set<string>>(new Set());
   const [round2Rescheduled, setRound2Rescheduled] = useState<Set<string>>(new Set());
   const [offered, setOffered] = useState<Set<string>>(new Set());
+  const [offeredRejected, setOfferedRejected] = useState<Set<string>>(new Set());
+  const [offeredBackedOut, setOfferedBackedOut] = useState<Set<string>>(new Set());
   const [onboarding, setOnboarding] = useState<Set<string>>(new Set());
+  const [onboardingRejected, setOnboardingRejected] = useState<Set<string>>(new Set());
+  const [onboardingBackedOut, setOnboardingBackedOut] = useState<Set<string>>(new Set());
   
   // View JD Modal state
   const [showViewJDModal, setShowViewJDModal] = useState(false);
@@ -122,12 +128,18 @@ export default function RecruiterWorkflowPage() {
     interview_rescheduled: {},
     round1_selected: {},
     round1_rejected: {},
+    round1_backed_out: {},
     round1_rescheduled: {},
     round2_selected: {},
     round2_rejected: {},
+    round2_backed_out: {},
     round2_rescheduled: {},
     offered: {},
-    onboarding: {}
+    offered_rejected: {},
+    offered_backed_out: {},
+    onboarding: {},
+    onboarding_rejected: {},
+    onboarding_backed_out: {}
   });
   
   // Blocked profiles state for action button blocking
@@ -449,12 +461,18 @@ export default function RecruiterWorkflowPage() {
       interview_rescheduled: Array.from(interviewRescheduled),
       round1_selected: Array.from(round1Selected),
       round1_rejected: Array.from(round1Rejected),
+      round1_backed_out: Array.from(round1BackedOut),
       round1_rescheduled: Array.from(round1Rescheduled),
       round2_selected: Array.from(round2Selected),
       round2_rejected: Array.from(round2Rejected),
+      round2_backed_out: Array.from(round2BackedOut),
       round2_rescheduled: Array.from(round2Rescheduled),
       offered: Array.from(offered),
+      offered_rejected: Array.from(offeredRejected),
+      offered_backed_out: Array.from(offeredBackedOut),
       onboarding: Array.from(onboarding),
+      onboarding_rejected: Array.from(onboardingRejected),
+      onboarding_backed_out: Array.from(onboardingBackedOut),
       current_step: currentStep,
       newly_added_profiles: Array.from(newlyAddedProfiles),
       session_start_time: sessionStartTime,
@@ -495,12 +513,18 @@ export default function RecruiterWorkflowPage() {
         setInterviewRescheduled(ensureSet(response.data.interview_rescheduled));
         setRound1Selected(ensureSet(response.data.round1_selected));
         setRound1Rejected(ensureSet(response.data.round1_rejected));
+        setRound1BackedOut(ensureSet(response.data.round1_backed_out));
         setRound1Rescheduled(ensureSet(response.data.round1_rescheduled));
         setRound2Selected(ensureSet(response.data.round2_selected));
         setRound2Rejected(ensureSet(response.data.round2_rejected));
+        setRound2BackedOut(ensureSet(response.data.round2_backed_out));
         setRound2Rescheduled(ensureSet(response.data.round2_rescheduled));
         setOffered(ensureSet(response.data.offered));
+        setOfferedRejected(ensureSet(response.data.offered_rejected));
+        setOfferedBackedOut(ensureSet(response.data.offered_backed_out));
         setOnboarding(ensureSet(response.data.onboarding));
+        setOnboardingRejected(ensureSet(response.data.onboarding_rejected));
+        setOnboardingBackedOut(ensureSet(response.data.onboarding_backed_out));
         setNewlyAddedProfiles(ensureSet(response.data.newly_added_profiles));
         setSessionStartTime(response.data.session_start_time || Date.now());
         
@@ -542,12 +566,18 @@ export default function RecruiterWorkflowPage() {
         setInterviewRescheduled(ensureSet(workflowState.interview_rescheduled));
         setRound1Selected(ensureSet(workflowState.round1_selected));
         setRound1Rejected(ensureSet(workflowState.round1_rejected));
+        setRound1BackedOut(ensureSet(workflowState.round1_backed_out));
         setRound1Rescheduled(ensureSet(workflowState.round1_rescheduled));
         setRound2Selected(ensureSet(workflowState.round2_selected));
         setRound2Rejected(ensureSet(workflowState.round2_rejected));
+        setRound2BackedOut(ensureSet(workflowState.round2_backed_out));
         setRound2Rescheduled(ensureSet(workflowState.round2_rescheduled));
         setOffered(ensureSet(workflowState.offered));
+        setOfferedRejected(ensureSet(workflowState.offered_rejected));
+        setOfferedBackedOut(ensureSet(workflowState.offered_backed_out));
         setOnboarding(ensureSet(workflowState.onboarding));
+        setOnboardingRejected(ensureSet(workflowState.onboarding_rejected));
+        setOnboardingBackedOut(ensureSet(workflowState.onboarding_backed_out));
         setNewlyAddedProfiles(ensureSet(workflowState.newly_added_profiles));
         setSessionStartTime(workflowState.session_start_time || Date.now());
         
@@ -608,12 +638,18 @@ export default function RecruiterWorkflowPage() {
         setInterviewRescheduled(ensureSet(workflowData.interview_rescheduled));
         setRound1Selected(ensureSet(workflowData.round1_selected));
         setRound1Rejected(ensureSet(workflowData.round1_rejected));
+        setRound1BackedOut(ensureSet(workflowData.round1_backed_out));
         setRound1Rescheduled(ensureSet(workflowData.round1_rescheduled));
         setRound2Selected(ensureSet(workflowData.round2_selected));
         setRound2Rejected(ensureSet(workflowData.round2_rejected));
+        setRound2BackedOut(ensureSet(workflowData.round2_backed_out));
         setRound2Rescheduled(ensureSet(workflowData.round2_rescheduled));
         setOffered(ensureSet(workflowData.offered));
+        setOfferedRejected(ensureSet(workflowData.offered_rejected));
+        setOfferedBackedOut(ensureSet(workflowData.offered_backed_out));
         setOnboarding(ensureSet(workflowData.onboarding));
+        setOnboardingRejected(ensureSet(workflowData.onboarding_rejected));
+        setOnboardingBackedOut(ensureSet(workflowData.onboarding_backed_out));
         setCurrentStep(workflowData.current_step || 'candidate_submission');
         setNewlyAddedProfiles(ensureSet(workflowData.newly_added_profiles));
         setSessionStartTime(workflowData.session_start_time || Date.now());
@@ -639,12 +675,18 @@ export default function RecruiterWorkflowPage() {
           setInterviewRescheduled(ensureSet(localStorageData.interview_rescheduled));
           setRound1Selected(ensureSet(localStorageData.round1_selected));
           setRound1Rejected(ensureSet(localStorageData.round1_rejected));
+          setRound1BackedOut(ensureSet(localStorageData.round1_backed_out));
           setRound1Rescheduled(ensureSet(localStorageData.round1_rescheduled));
           setRound2Selected(ensureSet(localStorageData.round2_selected));
           setRound2Rejected(ensureSet(localStorageData.round2_rejected));
+          setRound2BackedOut(ensureSet(localStorageData.round2_backed_out));
           setRound2Rescheduled(ensureSet(localStorageData.round2_rescheduled));
           setOffered(ensureSet(localStorageData.offered));
+          setOfferedRejected(ensureSet(localStorageData.offered_rejected));
+          setOfferedBackedOut(ensureSet(localStorageData.offered_backed_out));
           setOnboarding(ensureSet(localStorageData.onboarding));
+          setOnboardingRejected(ensureSet(localStorageData.onboarding_rejected));
+          setOnboardingBackedOut(ensureSet(localStorageData.onboarding_backed_out));
           setCurrentStep(localStorageData.current_step);
           setNewlyAddedProfiles(ensureSet(localStorageData.newly_added_profiles));
           setSessionStartTime(localStorageData.session_start_time);
@@ -978,6 +1020,59 @@ export default function RecruiterWorkflowPage() {
       updateStepTimestamp(studentId, 'round1_rejected');
       removeStepTimestamp(studentId, 'round1_selected');
       removeStepTimestamp(studentId, 'round1_rescheduled');
+      removeStepTimestamp(studentId, 'round1_backed_out');
+    }
+  };
+
+  const handleRound1BackOut = async (studentId: string) => {
+    if (round1BackedOut.has(studentId)) {
+      // If already backed out, remove from backed out (undo)
+      setRound1BackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      removeStepTimestamp(studentId, 'round1_backed_out');
+    } else {
+      // If not backed out, add to backed out and remove from selected, rejected, and rescheduled
+      setRound1BackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.add(studentId);
+        return newSet;
+      });
+      setRound1Selected(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      setRound1Rejected(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      setRound1Rescheduled(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      
+      // Update API
+      try {
+        await api.post('/workflow-step', {
+          request_id: requestId,
+          step: 'interview_round_1',
+          profile_ids: [studentId],
+          status: 'backout',
+          user_id: currentUser?.user_id
+        });
+      } catch (error) {
+        console.error('Failed to update round 1 backout status:', error);
+      }
+      
+      updateStepTimestamp(studentId, 'round1_backed_out');
+      removeStepTimestamp(studentId, 'round1_selected');
+      removeStepTimestamp(studentId, 'round1_rejected');
+      removeStepTimestamp(studentId, 'round1_rescheduled');
     }
   };
 
@@ -1069,6 +1164,59 @@ export default function RecruiterWorkflowPage() {
       
       updateStepTimestamp(studentId, 'round2_rejected');
       removeStepTimestamp(studentId, 'round2_selected');
+      removeStepTimestamp(studentId, 'round2_rescheduled');
+      removeStepTimestamp(studentId, 'round2_backed_out');
+    }
+  };
+
+  const handleRound2BackOut = async (studentId: string) => {
+    if (round2BackedOut.has(studentId)) {
+      // If already backed out, remove from backed out (undo)
+      setRound2BackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      removeStepTimestamp(studentId, 'round2_backed_out');
+    } else {
+      // If not backed out, add to backed out and remove from selected, rejected, and rescheduled
+      setRound2BackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.add(studentId);
+        return newSet;
+      });
+      setRound2Selected(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      setRound2Rejected(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      setRound2Rescheduled(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      
+      // Update API
+      try {
+        await api.post('/workflow-step', {
+          request_id: requestId,
+          step: 'interview_round_2',
+          profile_ids: [studentId],
+          status: 'backout',
+          user_id: currentUser?.user_id
+        });
+      } catch (error) {
+        console.error('Failed to update round 2 backout status:', error);
+      }
+      
+      updateStepTimestamp(studentId, 'round2_backed_out');
+      removeStepTimestamp(studentId, 'round2_selected');
+      removeStepTimestamp(studentId, 'round2_rejected');
       removeStepTimestamp(studentId, 'round2_rescheduled');
     }
   };
@@ -1200,6 +1348,98 @@ export default function RecruiterWorkflowPage() {
     }
   };
 
+  const handleOfferedReject = async (studentId: string) => {
+    if (offeredRejected.has(studentId)) {
+      // If already rejected, remove from rejection (undo)
+      setOfferedRejected(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      removeStepTimestamp(studentId, 'offered_rejected');
+    } else {
+      // If not rejected, add to rejection and remove from offered and backed out
+      setOfferedRejected(prev => {
+        const newSet = new Set(prev);
+        newSet.add(studentId);
+        return newSet;
+      });
+      setOffered(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      setOfferedBackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      
+      // Update API
+      try {
+        await api.post('/workflow-step', {
+          request_id: requestId,
+          step: 'offered',
+          profile_ids: [studentId],
+          status: 'rejected',
+          user_id: currentUser?.user_id
+        });
+      } catch (error) {
+        console.error('Failed to update offered rejection status:', error);
+      }
+      
+      updateStepTimestamp(studentId, 'offered_rejected');
+      removeStepTimestamp(studentId, 'offered');
+      removeStepTimestamp(studentId, 'offered_backed_out');
+    }
+  };
+
+  const handleOfferedBackOut = async (studentId: string) => {
+    if (offeredBackedOut.has(studentId)) {
+      // If already backed out, remove from backed out (undo)
+      setOfferedBackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      removeStepTimestamp(studentId, 'offered_backed_out');
+    } else {
+      // If not backed out, add to backed out and remove from offered and rejected
+      setOfferedBackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.add(studentId);
+        return newSet;
+      });
+      setOffered(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      setOfferedRejected(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      
+      // Update API
+      try {
+        await api.post('/workflow-step', {
+          request_id: requestId,
+          step: 'offered',
+          profile_ids: [studentId],
+          status: 'backout',
+          user_id: currentUser?.user_id
+        });
+      } catch (error) {
+        console.error('Failed to update offered backout status:', error);
+      }
+      
+      updateStepTimestamp(studentId, 'offered_backed_out');
+      removeStepTimestamp(studentId, 'offered');
+      removeStepTimestamp(studentId, 'offered_rejected');
+    }
+  };
+
   const saveOnboardingStatus = async (onboardedIds: string[]) => {
     try {
       // Save to both endpoints for consistency
@@ -1253,6 +1493,98 @@ export default function RecruiterWorkflowPage() {
       }
       
       updateStepTimestamp(studentId, 'onboarding');
+    }
+  };
+
+  const handleOnboardingReject = async (studentId: string) => {
+    if (onboardingRejected.has(studentId)) {
+      // If already rejected, remove from rejection (undo)
+      setOnboardingRejected(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      removeStepTimestamp(studentId, 'onboarding_rejected');
+    } else {
+      // If not rejected, add to rejection and remove from onboarding and backed out
+      setOnboardingRejected(prev => {
+        const newSet = new Set(prev);
+        newSet.add(studentId);
+        return newSet;
+      });
+      setOnboarding(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      setOnboardingBackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      
+      // Update API
+      try {
+        await api.post('/workflow-step', {
+          request_id: requestId,
+          step: 'onboarding',
+          profile_ids: [studentId],
+          status: 'rejected',
+          user_id: currentUser?.user_id
+        });
+      } catch (error) {
+        console.error('Failed to update onboarding rejection status:', error);
+      }
+      
+      updateStepTimestamp(studentId, 'onboarding_rejected');
+      removeStepTimestamp(studentId, 'onboarding');
+      removeStepTimestamp(studentId, 'onboarding_backed_out');
+    }
+  };
+
+  const handleOnboardingBackOut = async (studentId: string) => {
+    if (onboardingBackedOut.has(studentId)) {
+      // If already backed out, remove from backed out (undo)
+      setOnboardingBackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      removeStepTimestamp(studentId, 'onboarding_backed_out');
+    } else {
+      // If not backed out, add to backed out and remove from onboarding and rejected
+      setOnboardingBackedOut(prev => {
+        const newSet = new Set(prev);
+        newSet.add(studentId);
+        return newSet;
+      });
+      setOnboarding(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      setOnboardingRejected(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
+      
+      // Update API
+      try {
+        await api.post('/workflow-step', {
+          request_id: requestId,
+          step: 'onboarding',
+          profile_ids: [studentId],
+          status: 'backout',
+          user_id: currentUser?.user_id
+        });
+      } catch (error) {
+        console.error('Failed to update onboarding backout status:', error);
+      }
+      
+      updateStepTimestamp(studentId, 'onboarding_backed_out');
+      removeStepTimestamp(studentId, 'onboarding');
+      removeStepTimestamp(studentId, 'onboarding_rejected');
     }
   };
 
@@ -4130,6 +4462,20 @@ export default function RecruiterWorkflowPage() {
                             >
                               {round1Rescheduled.has(profile.student_id) ? '✓ Re-Scheduled' : 'Re-Scheduled'}
                             </button>
+                            <button
+                              onClick={() => handleRound1BackOut(profile.student_id)}
+                              disabled={isProfileActionBlocked(profile, 'interview_round_1')}
+                              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                isProfileActionBlocked(profile, 'interview_round_1')
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : round1BackedOut.has(profile.student_id)
+                                  ? 'bg-yellow-600 text-white hover:bg-yellow-700'
+                                  : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                              }`}
+                              title={isProfileActionBlocked(profile, 'interview_round_1') ? 'Profile has progressed beyond this step - cannot modify' : round1BackedOut.has(profile.student_id) ? 'Click to undo backout' : 'Click to mark as backed out'}
+                            >
+                              {round1BackedOut.has(profile.student_id) ? '✗ Backed Out' : 'Backout'}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -4346,6 +4692,20 @@ export default function RecruiterWorkflowPage() {
                             >
                               {round2Rescheduled.has(profile.student_id) ? '✓ Re-Scheduled' : 'Re-Scheduled'}
                             </button>
+                            <button
+                              onClick={() => handleRound2BackOut(profile.student_id)}
+                              disabled={isProfileActionBlocked(profile, 'interview_round_2')}
+                              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                isProfileActionBlocked(profile, 'interview_round_2')
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : round2BackedOut.has(profile.student_id)
+                                  ? 'bg-yellow-600 text-white hover:bg-yellow-700'
+                                  : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                              }`}
+                              title={isProfileActionBlocked(profile, 'interview_round_2') ? 'Profile has progressed beyond this step - cannot modify' : round2BackedOut.has(profile.student_id) ? 'Click to undo backout' : 'Click to mark as backed out'}
+                            >
+                              {round2BackedOut.has(profile.student_id) ? '✗ Backed Out' : 'Backout'}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -4487,20 +4847,50 @@ export default function RecruiterWorkflowPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <button
-                            onClick={() => handleOffered(profile.student_id)}
-                            disabled={isProfileActionBlocked(profile, 'offered')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                              isProfileActionBlocked(profile, 'offered')
-                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                : offered.has(profile.student_id)
-                                ? 'bg-green-600 text-white hover:bg-green-700'
-                                : 'bg-green-100 text-green-700 hover:bg-green-200'
-                            }`}
-                            title={isProfileActionBlocked(profile, 'offered') ? 'Profile has progressed beyond this step - cannot modify' : offered.has(profile.student_id) ? 'Click to undo offer' : 'Click to mark as offered'}
-                          >
-                            {offered.has(profile.student_id) ? '✓ Offered' : 'Mark as Offered'}
-                          </button>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleOffered(profile.student_id)}
+                              disabled={isProfileActionBlocked(profile, 'offered')}
+                              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                isProfileActionBlocked(profile, 'offered')
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : offered.has(profile.student_id)
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                              }`}
+                              title={isProfileActionBlocked(profile, 'offered') ? 'Profile has progressed beyond this step - cannot modify' : offered.has(profile.student_id) ? 'Click to undo offer' : 'Click to mark as offered'}
+                            >
+                              {offered.has(profile.student_id) ? '✓ Offered' : 'Mark as Offered'}
+                            </button>
+                            <button
+                              onClick={() => handleOfferedReject(profile.student_id)}
+                              disabled={isProfileActionBlocked(profile, 'offered')}
+                              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                isProfileActionBlocked(profile, 'offered')
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : offeredRejected.has(profile.student_id)
+                                  ? 'bg-red-600 text-white hover:bg-red-700'
+                                  : 'bg-red-100 text-red-700 hover:bg-red-200'
+                              }`}
+                              title={isProfileActionBlocked(profile, 'offered') ? 'Profile has progressed beyond this step - cannot modify' : offeredRejected.has(profile.student_id) ? 'Click to undo rejection' : 'Click to reject'}
+                            >
+                              {offeredRejected.has(profile.student_id) ? '✗ Rejected' : 'Reject'}
+                            </button>
+                            <button
+                              onClick={() => handleOfferedBackOut(profile.student_id)}
+                              disabled={isProfileActionBlocked(profile, 'offered')}
+                              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                isProfileActionBlocked(profile, 'offered')
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : offeredBackedOut.has(profile.student_id)
+                                  ? 'bg-yellow-600 text-white hover:bg-yellow-700'
+                                  : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                              }`}
+                              title={isProfileActionBlocked(profile, 'offered') ? 'Profile has progressed beyond this step - cannot modify' : offeredBackedOut.has(profile.student_id) ? 'Click to undo backout' : 'Click to mark as backed out'}
+                            >
+                              {offeredBackedOut.has(profile.student_id) ? '✗ Backed Out' : 'Backout'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -4615,20 +5005,50 @@ export default function RecruiterWorkflowPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <button
-                            onClick={() => handleOnboarding(profile.student_id)}
-                            disabled={isProfileActionBlocked(profile, 'onboarding')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                              isProfileActionBlocked(profile, 'onboarding')
-                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                : onboarding.has(profile.student_id)
-                                ? 'bg-pink-600 text-white hover:bg-pink-700'
-                                : 'bg-pink-100 text-pink-700 hover:bg-pink-200'
-                            }`}
-                            title={isProfileActionBlocked(profile, 'onboarding') ? 'Profile has progressed beyond this step - cannot modify' : onboarding.has(profile.student_id) ? 'Click to undo onboarding' : 'Click to mark as onboarded'}
-                          >
-                            {onboarding.has(profile.student_id) ? '✓ OnBoarded' : 'Mark as OnBoarded'}
-                          </button>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleOnboarding(profile.student_id)}
+                              disabled={isProfileActionBlocked(profile, 'onboarding')}
+                              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                isProfileActionBlocked(profile, 'onboarding')
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : onboarding.has(profile.student_id)
+                                  ? 'bg-pink-600 text-white hover:bg-pink-700'
+                                  : 'bg-pink-100 text-pink-700 hover:bg-pink-200'
+                              }`}
+                              title={isProfileActionBlocked(profile, 'onboarding') ? 'Profile has progressed beyond this step - cannot modify' : onboarding.has(profile.student_id) ? 'Click to undo onboarding' : 'Click to mark as onboarded'}
+                            >
+                              {onboarding.has(profile.student_id) ? '✓ OnBoarded' : 'Mark as OnBoarded'}
+                            </button>
+                            <button
+                              onClick={() => handleOnboardingReject(profile.student_id)}
+                              disabled={isProfileActionBlocked(profile, 'onboarding')}
+                              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                isProfileActionBlocked(profile, 'onboarding')
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : onboardingRejected.has(profile.student_id)
+                                  ? 'bg-red-600 text-white hover:bg-red-700'
+                                  : 'bg-red-100 text-red-700 hover:bg-red-200'
+                              }`}
+                              title={isProfileActionBlocked(profile, 'onboarding') ? 'Profile has progressed beyond this step - cannot modify' : onboardingRejected.has(profile.student_id) ? 'Click to undo rejection' : 'Click to reject'}
+                            >
+                              {onboardingRejected.has(profile.student_id) ? '✗ Rejected' : 'Reject'}
+                            </button>
+                            <button
+                              onClick={() => handleOnboardingBackOut(profile.student_id)}
+                              disabled={isProfileActionBlocked(profile, 'onboarding')}
+                              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                isProfileActionBlocked(profile, 'onboarding')
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : onboardingBackedOut.has(profile.student_id)
+                                  ? 'bg-yellow-600 text-white hover:bg-yellow-700'
+                                  : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                              }`}
+                              title={isProfileActionBlocked(profile, 'onboarding') ? 'Profile has progressed beyond this step - cannot modify' : onboardingBackedOut.has(profile.student_id) ? 'Click to undo backout' : 'Click to mark as backed out'}
+                            >
+                              {onboardingBackedOut.has(profile.student_id) ? '✗ Backed Out' : 'Backout'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

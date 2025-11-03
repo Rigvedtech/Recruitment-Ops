@@ -3402,6 +3402,8 @@ def get_recruiter_activity():
         )
         
         # Company-wise recruiter performance using new schema (no legacy tracker table)
+        # FIXED: Use requirement.user_id (assigned recruiter) instead of profile.created_by_recruiter
+        # This ensures consistency with Daily Activity tracking and works even if created_by_recruiter is NULL
         company_performance_query = """
         SELECT 
             r.company_name,
@@ -3415,10 +3417,11 @@ def get_recruiter_activity():
             END as success_rate
         FROM profiles p
         JOIN requirements r ON p.requirement_id = r.requirement_id
-        JOIN users u ON p.created_by_recruiter = u.user_id
-        WHERE p.created_by_recruiter IS NOT NULL 
+        JOIN users u ON r.user_id = u.user_id
+        WHERE r.user_id IS NOT NULL 
         AND u.role = 'recruiter'
         AND LOWER(u.username) != 'admin'
+        AND p.is_deleted = FALSE
         GROUP BY r.company_name, u.username
         ORDER BY r.company_name, onboarded_profiles DESC
         """

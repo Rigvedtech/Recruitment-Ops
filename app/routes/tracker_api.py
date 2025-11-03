@@ -2087,7 +2087,7 @@ def create_profiles():
                     try:
                         parts = auth_header.split(' ')
                         if len(parts) == 2 and parts[0] == 'Bearer':
-                            username = parts[1]
+                            username = parts[1].strip()  # Strip whitespace
                             current_user = get_db_session().query(User).filter_by(username=username).first()
                     except Exception as e:
                         current_app.logger.warning(f"Error getting current user: {str(e)}")

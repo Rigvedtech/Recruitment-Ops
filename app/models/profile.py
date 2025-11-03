@@ -8,16 +8,17 @@ class SourceEnum(enum.Enum):
     monster_india = "monster_india"
     timesjobs = "timesjobs"
     shine_com = "shine_com"
-    freshersworld = "freshersworld"
+    freshersworld = "freshersworld" 
     github_stackoverflow = "github_stackoverflow"
     internshala = "internshala"
-    linkedin = "LinkedIn"
+    LinkedIn = "LinkedIn"
     referral = "Referral"
 
 class ProfileStatusEnum(enum.Enum):
     onboarded = "onboarded"
     rejected = "rejected"
     selected = "selected"
+    backout = "backout"
 
 class Profile(db.Model):
     __tablename__ = 'profiles'

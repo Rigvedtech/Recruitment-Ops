@@ -7,6 +7,7 @@ class InterviewRoundOneStatusEnum(enum.Enum):
     select = "select"
     reject = "reject"
     reschedule = "reschedule"
+    backout = "backout"
 
 class InterviewRoundOne(db.Model):
     __tablename__ = 'interview_round_one'

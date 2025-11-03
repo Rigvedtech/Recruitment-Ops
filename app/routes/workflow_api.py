@@ -13,6 +13,7 @@ from app.database import db
 from datetime import datetime
 import logging
 from app.middleware.domain_auth import require_domain_auth
+from app.middleware.redis_performance_middleware import invalidate_cache_pattern
 
 def get_db_session():
     """
@@ -99,12 +100,17 @@ def get_workflow_progress(request_id):
             'interview_rescheduled': [profile_id_to_student.get(str(r.profile_id)) for r in interview_scheduled_records if r.status == InterviewScheduledStatusEnum.rescheduled and profile_id_to_student.get(str(r.profile_id))],
             'round1_selected': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_one_records if r.status == InterviewRoundOneStatusEnum.select and profile_id_to_student.get(str(r.profile_id))],
             'round1_rejected': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_one_records if r.status == InterviewRoundOneStatusEnum.reject and profile_id_to_student.get(str(r.profile_id))],
+            'round1_backed_out': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_one_records if r.status == InterviewRoundOneStatusEnum.backout and profile_id_to_student.get(str(r.profile_id))],
             'round1_rescheduled': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_one_records if r.status == InterviewRoundOneStatusEnum.reschedule and profile_id_to_student.get(str(r.profile_id))],
             'round2_selected': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_two_records if r.status == InterviewRoundTwoStatusEnum.select and profile_id_to_student.get(str(r.profile_id))],
             'round2_rejected': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_two_records if r.status == InterviewRoundTwoStatusEnum.reject and profile_id_to_student.get(str(r.profile_id))],
+            'round2_backed_out': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_two_records if r.status == InterviewRoundTwoStatusEnum.backout and profile_id_to_student.get(str(r.profile_id))],
             'round2_rescheduled': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_two_records if r.status == InterviewRoundTwoStatusEnum.reschedule and profile_id_to_student.get(str(r.profile_id))],
             'offered': [profile_id_to_student.get(str(r.profile_id)) for r in offer_records if r.active and profile_id_to_student.get(str(r.profile_id))],
+            'offered_rejected': [profile_id_to_student.get(str(r.profile_id)) for r in offer_records if not r.active and profile_id_to_student.get(str(r.profile_id))],
             'onboarding': [profile_id_to_student.get(str(r.profile_id)) for r in onboarding_records if r.status == OnboardingStatusEnum.onboarded and profile_id_to_student.get(str(r.profile_id))] + [p.student_id for p in onboarded_profiles],
+            'onboarding_rejected': [profile_id_to_student.get(str(r.profile_id)) for r in onboarding_records if r.status == OnboardingStatusEnum.rejected and profile_id_to_student.get(str(r.profile_id))],
+            'onboarding_backed_out': [profile_id_to_student.get(str(r.profile_id)) for r in onboarding_records if r.status == OnboardingStatusEnum.backout and profile_id_to_student.get(str(r.profile_id))],
             'current_step': 'candidate_submission',
             'newly_added_profiles': [],
             'session_start_time': int(datetime.utcnow().timestamp() * 1000),
@@ -314,6 +320,16 @@ def update_workflow_step():
                         round1.status = InterviewRoundOneStatusEnum(status)
                         round1.status_timestamp = datetime.utcnow()
                         round1.updated_by = current_user.user_id if current_user else None
+                    
+                    # Update profile status
+                    from app.models.profile import ProfileStatusEnum
+                    if status == 'select':
+                        profile.status = ProfileStatusEnum.selected
+                    elif status == 'reject':
+                        profile.status = ProfileStatusEnum.rejected
+                    elif status == 'backout':
+                        profile.status = ProfileStatusEnum.backout
+                    profile.updated_by = current_user.user_id if current_user else None
                 
                 elif step == 'interview_round_2':
                     round2 = get_db_session().query(InterviewRoundTwo).filter_by(
@@ -335,6 +351,16 @@ def update_workflow_step():
                         round2.status = InterviewRoundTwoStatusEnum(status)
                         round2.status_timestamp = datetime.utcnow()
                         round2.updated_by = current_user.user_id if current_user else None
+                    
+                    # Update profile status
+                    from app.models.profile import ProfileStatusEnum
+                    if status == 'select':
+                        profile.status = ProfileStatusEnum.selected
+                    elif status == 'reject':
+                        profile.status = ProfileStatusEnum.rejected
+                    elif status == 'backout':
+                        profile.status = ProfileStatusEnum.backout
+                    profile.updated_by = current_user.user_id if current_user else None
                 
                 elif step == 'offered':
                     offer = get_db_session().query(Offer).filter_by(
@@ -353,6 +379,16 @@ def update_workflow_step():
                     else:
                         offer.active = status == 'offered'
                         offer.updated_by = current_user.user_id if current_user else None
+                    
+                    # Update profile status
+                    from app.models.profile import ProfileStatusEnum
+                    if status == 'offered':
+                        profile.status = ProfileStatusEnum.selected
+                    elif status == 'rejected':
+                        profile.status = ProfileStatusEnum.rejected
+                    elif status == 'backout':
+                        profile.status = ProfileStatusEnum.backout
+                    profile.updated_by = current_user.user_id if current_user else None
                 
                 elif step == 'onboarding':
                     # Create or update onboarding record
@@ -374,10 +410,13 @@ def update_workflow_step():
                         onboarding.updated_by = current_user.user_id if current_user else None
                     
                     # Also update profile status for backward compatibility
+                    from app.models.profile import ProfileStatusEnum
                     if status == 'onboarded':
-                        profile.status = 'onboarded'
+                        profile.status = ProfileStatusEnum.onboarded
                     elif status == 'rejected':
-                        profile.status = 'rejected'
+                        profile.status = ProfileStatusEnum.rejected
+                    elif status == 'backout':
+                        profile.status = ProfileStatusEnum.backout
                     profile.updated_by = current_user.user_id if current_user else None
                 
                 updated_profiles.append(str(profile.profile_id))
@@ -398,6 +437,14 @@ def update_workflow_step():
                 current_app.logger.error(f"Error auto-updating requirement status: {str(e)}")
         
         get_db_session().commit()
+        
+        # Invalidate recruiter activity cache when onboarding status is updated
+        # This ensures Company Performance section updates immediately
+        if step == 'onboarding' and updated_profiles:
+            try:
+                invalidate_cache_pattern('api_cache:*recruiter-activity*')
+            except Exception as e:
+                current_app.logger.warning(f"Failed to invalidate cache: {str(e)}")
         
         return jsonify({
             'success': True,
@@ -467,8 +514,9 @@ def get_workflow_state(request_id):
         interview_round_one_records = get_db_session().query(InterviewRoundOne).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
         interview_round_two_records = get_db_session().query(InterviewRoundTwo).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
         offer_records = get_db_session().query(Offer).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
+        onboarding_records = get_db_session().query(Onboarding).filter_by(requirement_id=requirement.requirement_id, is_deleted=False).all()
         
-        # For onboarding, we'll use the profile status since onboarding table doesn't have profile_id
+        # Also check profile status for backward compatibility
         onboarded_profiles = [p for p in profiles if p.status and p.status.value == 'onboarded']
         
         # Build workflow state structure
@@ -484,12 +532,17 @@ def get_workflow_state(request_id):
             'interviewRescheduled': [profile_id_to_student.get(str(r.profile_id)) for r in interview_scheduled_records if r.status == InterviewScheduledStatusEnum.rescheduled and profile_id_to_student.get(str(r.profile_id))],
             'round1Selected': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_one_records if r.status == InterviewRoundOneStatusEnum.select and profile_id_to_student.get(str(r.profile_id))],
             'round1Rejected': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_one_records if r.status == InterviewRoundOneStatusEnum.reject and profile_id_to_student.get(str(r.profile_id))],
+            'round1BackedOut': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_one_records if r.status == InterviewRoundOneStatusEnum.backout and profile_id_to_student.get(str(r.profile_id))],
             'round1Rescheduled': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_one_records if r.status == InterviewRoundOneStatusEnum.reschedule and profile_id_to_student.get(str(r.profile_id))],
             'round2Selected': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_two_records if r.status == InterviewRoundTwoStatusEnum.select and profile_id_to_student.get(str(r.profile_id))],
             'round2Rejected': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_two_records if r.status == InterviewRoundTwoStatusEnum.reject and profile_id_to_student.get(str(r.profile_id))],
+            'round2BackedOut': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_two_records if r.status == InterviewRoundTwoStatusEnum.backout and profile_id_to_student.get(str(r.profile_id))],
             'round2Rescheduled': [profile_id_to_student.get(str(r.profile_id)) for r in interview_round_two_records if r.status == InterviewRoundTwoStatusEnum.reschedule and profile_id_to_student.get(str(r.profile_id))],
             'offered': [profile_id_to_student.get(str(r.profile_id)) for r in offer_records if r.active and profile_id_to_student.get(str(r.profile_id))],
+            'offeredRejected': [profile_id_to_student.get(str(r.profile_id)) for r in offer_records if not r.active and profile_id_to_student.get(str(r.profile_id))],
             'onboarding': [p.student_id for p in onboarded_profiles],
+            'onboardingRejected': [profile_id_to_student.get(str(r.profile_id)) for r in onboarding_records if r.status == OnboardingStatusEnum.rejected and profile_id_to_student.get(str(r.profile_id))],
+            'onboardingBackedOut': [profile_id_to_student.get(str(r.profile_id)) for r in onboarding_records if r.status == OnboardingStatusEnum.backout and profile_id_to_student.get(str(r.profile_id))],
             'stepTimestamps': {}
         }
         

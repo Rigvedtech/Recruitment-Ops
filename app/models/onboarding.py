@@ -6,6 +6,7 @@ import enum
 class OnboardingStatusEnum(enum.Enum):
     onboarded = "onboarded"
     rejected = "rejected"
+    backout = "backout"
 
 class Onboarding(db.Model):
     __tablename__ = 'onboarding'

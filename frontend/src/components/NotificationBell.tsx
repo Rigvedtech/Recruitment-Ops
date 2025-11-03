@@ -85,17 +85,22 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
     try {
       setLoading(true);
       
-      // Get authentication headers
+      // Get authentication headers with token
       const token = localStorage.getItem('access_token');
       const domain = window.location.host;
+      
+      // If no token is available, don't make the request
+      if (!token) {
+        console.error('No access token found. User may need to log in again.');
+        setLoading(false);
+        return;
+      }
+      
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'X-Original-Domain': domain,
+        'Authorization': `Bearer ${token}`,
       };
-      
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
 
       if (user.role === 'admin') {
         // Admin sees all notifications from all users
@@ -120,6 +125,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
             );
             setNotifications(allNotifications);
           }
+        } else if (response.status === 401) {
+          console.error('Authentication failed - token may be expired or invalid');
+          // Dispatch session expired event to trigger re-login
+          window.dispatchEvent(new CustomEvent('session-expired', { 
+            detail: { reason: 'token_expired', status: 401 } 
+          }));
         } else {
           console.error('Failed to fetch admin notifications:', response.status, response.statusText);
         }
@@ -135,6 +146,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
             setNotifications(data.notifications);
             setUnreadCount(data.unread_count);
           }
+        } else if (response.status === 401) {
+          console.error('Authentication failed - token may be expired or invalid');
+          // Dispatch session expired event to trigger re-login
+          window.dispatchEvent(new CustomEvent('session-expired', { 
+            detail: { reason: 'token_expired', status: 401 } 
+          }));
         } else {
           console.error('Failed to fetch notifications:', response.status, response.statusText);
         }
@@ -155,17 +172,21 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
     }
 
     try {
-      // Get authentication headers
+      // Get authentication headers with token
       const token = localStorage.getItem('access_token');
       const domain = window.location.host;
+      
+      // If no token is available, don't make the request
+      if (!token) {
+        console.error('No access token found. User may need to log in again.');
+        return;
+      }
+      
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'X-Original-Domain': domain,
+        'Authorization': `Bearer ${token}`,
       };
-      
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
 
       if (user.role === 'admin') {
         // Admin needs to get unread count from all users
@@ -181,6 +202,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
             }, 0);
             setUnreadCount(totalUnread);
           }
+        } else if (response.status === 401) {
+          console.error('Authentication failed - token may be expired or invalid');
+          // Dispatch session expired event to trigger re-login
+          window.dispatchEvent(new CustomEvent('session-expired', { 
+            detail: { reason: 'token_expired', status: 401 } 
+          }));
         } else {
           console.error('Failed to fetch admin unread count:', response.status, response.statusText);
         }
@@ -195,6 +222,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
           if (data.success) {
             setUnreadCount(data.unread_count);
           }
+        } else if (response.status === 401) {
+          console.error('Authentication failed - token may be expired or invalid');
+          // Dispatch session expired event to trigger re-login
+          window.dispatchEvent(new CustomEvent('session-expired', { 
+            detail: { reason: 'token_expired', status: 401 } 
+          }));
         } else {
           console.error('Failed to fetch unread count:', response.status, response.statusText);
         }
@@ -216,12 +249,18 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
       const token = localStorage.getItem('access_token');
       const domain = window.location.host;
       
+      // If no token is available, don't make the request
+      if (!token) {
+        console.error('No access token found. User may need to log in again.');
+        return;
+      }
+      
       const response = await fetch(`${getApiBaseUrl()}/notifications/${notificationId}/read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Original-Domain': domain,
-          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ user_id: user.user_id }),
       });
@@ -236,6 +275,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
           )
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
+      } else if (response.status === 401) {
+        console.error('Authentication failed - token may be expired or invalid');
+        // Dispatch session expired event to trigger re-login
+        window.dispatchEvent(new CustomEvent('session-expired', { 
+          detail: { reason: 'token_expired', status: 401 } 
+        }));
       } else {
         console.error('Failed to mark notification as read:', response.status, response.statusText);
       }
@@ -256,12 +301,18 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
       const token = localStorage.getItem('access_token');
       const domain = window.location.host;
       
+      // If no token is available, don't make the request
+      if (!token) {
+        console.error('No access token found. User may need to log in again.');
+        return;
+      }
+      
       const response = await fetch(`${getApiBaseUrl()}/notifications/mark-all-read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Original-Domain': domain,
-          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ user_id: user.user_id }),
       });
@@ -272,6 +323,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ user }) => {
           prev.map(notif => ({ ...notif, is_read: true }))
         );
         setUnreadCount(0);
+      } else if (response.status === 401) {
+        console.error('Authentication failed - token may be expired or invalid');
+        // Dispatch session expired event to trigger re-login
+        window.dispatchEvent(new CustomEvent('session-expired', { 
+          detail: { reason: 'token_expired', status: 401 } 
+        }));
       } else {
         console.error('Failed to mark all notifications as read:', response.status, response.statusText);
       }
