@@ -1986,6 +1986,7 @@ def get_closed_requirements():
         return jsonify({'error': 'Failed to fetch closed requirements'}), 500
 
 @tracker_bp.route('/profiles', methods=['POST'])
+@require_domain_auth
 def create_profiles():
     """Create multiple profiles for a specific request_id"""
     try:
@@ -2008,9 +2009,34 @@ def create_profiles():
         if not requirement:
             return jsonify({'success': False, 'message': 'Requirement not found'}), 404
         
+        session = get_db_session()
         created_profiles = []
         student_ids = []
         skipped_duplicates = 0
+        
+        # Determine current user from domain-auth context (JWT claims)
+        domain_user = getattr(request, 'current_user', None)
+        current_user = None
+        if domain_user:
+            try:
+                if getattr(domain_user, 'user_id', None):
+                    current_user = session.query(User).filter_by(user_id=domain_user.user_id).first()
+                elif getattr(domain_user, 'username', None):
+                    current_user = session.query(User).filter_by(username=domain_user.username).first()
+            except Exception as e:
+                current_app.logger.warning(f"Failed to load current user from domain context: {str(e)}")
+        
+        # Fallback to legacy Authorization parsing for backward compatibility
+        if not current_user:
+            auth_header = request.headers.get('Authorization')
+            if auth_header:
+                try:
+                    parts = auth_header.split(' ')
+                    if len(parts) == 2 and parts[0] == 'Bearer':
+                        legacy_username = parts[1].strip()
+                        current_user = session.query(User).filter_by(username=legacy_username).first()
+                except Exception as e:
+                    current_app.logger.warning(f"Legacy auth header parsing failed: {str(e)}")
         
         def generate_unique_student_id():
             """Generate a unique student ID with retry logic"""
@@ -2081,17 +2107,6 @@ def create_profiles():
                 student_id = generate_unique_student_id()
                 
                 # Get current user for recruiter attribution
-                current_user = None
-                auth_header = request.headers.get('Authorization')
-                if auth_header:
-                    try:
-                        parts = auth_header.split(' ')
-                        if len(parts) == 2 and parts[0] == 'Bearer':
-                            username = parts[1].strip()  # Strip whitespace
-                            current_user = get_db_session().query(User).filter_by(username=username).first()
-                    except Exception as e:
-                        current_app.logger.warning(f"Error getting current user: {str(e)}")
-                
                 # Create new profile
                 profile = Profile(
                     student_id=student_id,

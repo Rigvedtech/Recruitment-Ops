@@ -5,7 +5,7 @@ from app.services.recruiter_notification_service import RecruiterNotificationSer
 from app.scheduler import get_scheduler_status, pause_scheduler, resume_scheduler, run_job_manually
 from app.models.requirement import Requirement, DepartmentEnum, CompanyEnum, ShiftEnum, JobTypeEnum, PriorityEnum
 from app.models.profile import Profile
-from app.models.user import User
+from app.models.user import User, UserRoleEnum
 # Legacy Tracker model - deprecated, use Profile.requirement_id relationship instead
 # from app.models.tracker import Tracker
 from app.database import db
@@ -3297,26 +3297,27 @@ def get_recruiter_activity():
             end_date = datetime.now().date()
             start_date = end_date - timedelta(days=days-1)
         
-        # Get all recruiters - only fetch username
-        recruiter_usernames = [r[0] for r in get_db_session().query(User.username).filter_by(role='recruiter').all()]
+        # Get all recruiters - fetch both user_id and username for attribution
+        recruiter_records = get_db_session().query(User.user_id, User.username).filter(User.role == UserRoleEnum.recruiter).all()
+        recruiter_usernames = [record[1] for record in recruiter_records]
+        recruiter_lookup = {str(record[0]): record[1] for record in recruiter_records if record[0] and record[1]}
         
-        # PERFORMANCE OPTIMIZATION: Fetch requirement-recruiter mapping ONCE (outside the daily loop)
-        # Use JOIN to get all requirements with their assigned recruiters in a single query
-        requirements_with_users = get_db_session().query(
+        # Fetch requirement owner mapping ONCE for fallback attribution (requirement owner must be recruiter)
+        requirement_owner_records = get_db_session().query(
             Requirement.requirement_id,
             User.username
         ).join(
-            User, 
+            User,
             Requirement.user_id == User.user_id
         ).filter(
-            User.role == 'recruiter'
+            User.role == UserRoleEnum.recruiter
         ).all()
         
-        # Create a mapping of requirement_id to assigned recruiters
-        requirement_recruiters = {}
-        for req_id, username in requirements_with_users:
-            if username:
-                requirement_recruiters[str(req_id)] = [username]
+        requirement_owner_map = {
+            str(req_id): username
+            for req_id, username in requirement_owner_records
+            if req_id and username
+        }
         
         # Get daily activity data
         daily_activity = []
@@ -3325,32 +3326,34 @@ def get_recruiter_activity():
         while current_date <= end_date:
             date_str = current_date.strftime('%Y-%m-%d')
             
-            # Get profiles submitted on this date, include requirement_id for attribution
+            # Get profiles submitted on this date, include creator for accurate attribution
             profiles_submitted = get_db_session().query(
                 Profile.profile_id,
                 Profile.requirement_id,
-                Profile.created_at
+                Profile.created_at,
+                Profile.created_by_recruiter
             ).filter(
                 func.date(Profile.created_at) == current_date
             ).all()
             
-            # Create a mapping of profile_id to requirement_id using the new schema
-            profile_to_requirement = {}
-            for profile in profiles_submitted:
-                # profile tuple includes requirement_id already from the query
-                if getattr(profile, 'requirement_id', None):
-                    profile_to_requirement[str(profile.profile_id)] = str(profile.requirement_id)
-            
             # Count profiles per recruiter for this date
             recruiter_counts = {recruiter: 0 for recruiter in recruiter_usernames}
             for profile in profiles_submitted:
-                req_id = profile_to_requirement.get(str(profile.profile_id))
-                if req_id and req_id in requirement_recruiters:
-                    assigned_recruiters = requirement_recruiters[req_id]
-                    for recruiter in assigned_recruiters:
-                        if recruiter in recruiter_usernames:
-                            recruiter_counts[recruiter] += 1
-                            break  # Count only once per profile
+                attributed_recruiter = None
+                
+                # Primary attribution: recruiter who created the profile
+                creator_id = getattr(profile, 'created_by_recruiter', None)
+                if creator_id:
+                    attributed_recruiter = recruiter_lookup.get(str(creator_id))
+                
+                # Fallback: requirement owner (legacy behavior) if creator not available
+                if not attributed_recruiter:
+                    req_id = getattr(profile, 'requirement_id', None)
+                    if req_id:
+                        attributed_recruiter = requirement_owner_map.get(str(req_id))
+                
+                if attributed_recruiter and attributed_recruiter in recruiter_counts:
+                    recruiter_counts[attributed_recruiter] += 1
             
             # Get active recruiters (consider active if submitted at least 1 profile)
             active_recruiters = [
@@ -3407,22 +3410,26 @@ def get_recruiter_activity():
         company_performance_query = """
         SELECT 
             r.company_name,
-            u.username as recruiter_name,
-            COUNT(*) as total_profiles_submitted,
-            COUNT(CASE WHEN p.status = 'onboarded' THEN 1 END) as onboarded_profiles,
+            COALESCE(u_creator.username, u_owner.username) AS recruiter_name,
+            COUNT(*) AS total_profiles_submitted,
+            COUNT(CASE WHEN p.status = 'onboarded' THEN 1 END) AS onboarded_profiles,
             CASE 
                 WHEN COUNT(*) > 0 THEN 
                     ROUND((COUNT(CASE WHEN p.status = 'onboarded' THEN 1 END)::numeric / COUNT(*)) * 100, 2)
                 ELSE 0.0 
-            END as success_rate
+            END AS success_rate
         FROM profiles p
         JOIN requirements r ON p.requirement_id = r.requirement_id
-        JOIN users u ON r.user_id = u.user_id
-        WHERE r.user_id IS NOT NULL 
-        AND u.role = 'recruiter'
-        AND LOWER(u.username) != 'admin'
-        AND p.is_deleted = FALSE
-        GROUP BY r.company_name, u.username
+        LEFT JOIN users u_creator 
+            ON p.created_by_recruiter = u_creator.user_id 
+            AND u_creator.role = 'recruiter'
+        LEFT JOIN users u_owner 
+            ON r.user_id = u_owner.user_id 
+            AND u_owner.role = 'recruiter'
+        WHERE p.is_deleted = FALSE
+        AND COALESCE(LOWER(u_creator.username), LOWER(u_owner.username)) IS NOT NULL
+        AND COALESCE(LOWER(u_creator.username), LOWER(u_owner.username)) != 'admin'
+        GROUP BY r.company_name, recruiter_name
         ORDER BY r.company_name, onboarded_profiles DESC
         """
         

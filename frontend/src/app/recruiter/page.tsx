@@ -38,10 +38,12 @@ interface RecruiterUser {
 }
 
 const RECRUITER_FILTER_STORAGE_KEY = 'recruiter_filters'
+const PAGE_SIZE = 15
 
 const JDTrackerTable: React.FC = () => {
   const [requirements, setRequirements] = useState<TrackerRequirement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTable, setLoadingTable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
@@ -87,6 +89,9 @@ const JDTrackerTable: React.FC = () => {
     }
   })
   const [showFilters, setShowFilters] = useState(false)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
 
   useEffect(() => {
     // Check authentication first
@@ -114,7 +119,7 @@ const JDTrackerTable: React.FC = () => {
 
   const fetchTrackerData = async (currentUser?: User | null) => {
     try {
-      setLoading(true);
+      setLoadingTable(true);
       // Try the new profiles-count endpoint first
       const data = await api.get('/tracker/profiles-count');
       let items: TrackerRequirement[] = data.requirements || [];
@@ -163,6 +168,7 @@ const JDTrackerTable: React.FC = () => {
         console.error('Error fetching tracker data:', fallbackErr);
       }
     } finally {
+      setLoadingTable(false);
       setLoading(false);
     }
   };
@@ -260,6 +266,18 @@ const JDTrackerTable: React.FC = () => {
     return true;
   });
 
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [JSON.stringify(appliedFilters)])
+
+  // Pagination calculations
+  const totalItems = filteredRequirements.length
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
+  const startIndex = (currentPage - 1) * PAGE_SIZE
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalItems)
+  const paginatedRequirements = filteredRequirements.slice(startIndex, endIndex)
+
   // Don't render anything until authentication is checked
   if (!authChecked) {
     return (
@@ -274,31 +292,6 @@ const JDTrackerTable: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-600 text-center">
-          <p className="text-xl font-semibold mb-2">Error</p>
-          <p>{error}</p>
-          <button
-            onClick={() => fetchTrackerData(user)}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Retry
-          </button>
-        </div>
       </div>
     );
   }
@@ -476,15 +469,44 @@ const JDTrackerTable: React.FC = () => {
 
             {/* Results Summary */}
             <div className="text-sm text-gray-600 dark:text-gray-300">
-              Showing {filteredRequirements.length} of {requirements.length} requirements
+              Showing {totalItems === 0 ? 0 : startIndex + 1}-{endIndex} of {totalItems} requirements
               {Object.values(appliedFilters).filter(filter => filter !== 'all').length > 0 && (
                 <span className="text-blue-600"> (filtered)</span>
               )}
             </div>
           </div>
           
-          {filteredRequirements.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <svg className="h-5 w-5 text-red-400 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-sm font-medium text-red-800">{error}</p>
+                </div>
+                <button 
+                  onClick={() => fetchTrackerData(user)}
+                  className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {loadingTable ? (
+            <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg p-12">
+              <div className="flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600 dark:text-gray-300">Loading requirements...</p>
+                </div>
+              </div>
+            </div>
+          ) : filteredRequirements.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg p-8 text-center text-gray-500">
               <p className="text-lg">
                 {user?.role === 'recruiter' 
                   ? "No requirements match the selected filters."
@@ -493,6 +515,8 @@ const JDTrackerTable: React.FC = () => {
               </p>
             </div>
           ) : (
+            <>
+            <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
             <div className="overflow-x-auto relative z-0">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -511,7 +535,7 @@ const JDTrackerTable: React.FC = () => {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredRequirements.map((requirement) => (
+                  {paginatedRequirements.map((requirement) => (
                     <tr key={requirement.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         <div className="flex items-center gap-2">
@@ -602,6 +626,66 @@ const JDTrackerTable: React.FC = () => {
           </tbody>
         </table>
             </div>
+            </div>
+            
+            {/* Pagination Controls - Numbered with ellipses */}
+            {totalItems > 0 && (
+              <div className="flex items-center justify-center px-4 py-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 rounded-b-lg shadow">
+                <div className="flex items-center gap-1">
+                  {/* Prev */}
+                  <button
+                    aria-label="Previous page"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className={`w-8 h-8 flex items-center justify-center rounded-full ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 011.414 1.414L8.414 10l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd"/></svg>
+                  </button>
+
+                  {(() => {
+                    const pages: (number | string)[] = []
+                    const add = (p: number | string) => pages.push(p)
+                    const showRange = (start: number, end: number) => {
+                      for (let i = start; i <= end; i++) add(i)
+                    }
+                    const left = Math.max(2, currentPage - 1)
+                    const right = Math.min(totalPages - 1, currentPage + 1)
+                    add(1)
+                    if (left > 2) add('...')
+                    showRange(left, right)
+                    if (right < totalPages - 1) add('...')
+                    if (totalPages > 1) add(totalPages)
+
+                    return pages.map((p, idx) => (
+                      typeof p === 'number' ? (
+                        <button
+                          key={`p-${p}-${idx}`}
+                          onClick={() => setCurrentPage(p)}
+                          className={`min-w-8 h-8 px-2 rounded-full text-sm flex items-center justify-center ${
+                            p === currentPage ? 'bg-blue-600 text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ) : (
+                        <span key={`e-${idx}`} className="px-2 text-gray-400 select-none">{p}</span>
+                      )
+                    ))
+                  })()}
+
+                  {/* Next */}
+                  <button
+                    aria-label="Next page"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`w-8 h-8 flex items-center justify-center rounded-full ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.293 4.293a1 1 0 011.414 0L14 9.586a1 1 0 010 1.414l-5.293 5.293a1 1 0 01-1.414-1.414L11.586 10 7.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>

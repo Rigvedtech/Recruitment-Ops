@@ -12,7 +12,7 @@ class SourceEnum(enum.Enum):
     github_stackoverflow = "github_stackoverflow"
     internshala = "internshala"
     LinkedIn = "LinkedIn"
-    referral = "Referral"
+    Referral = "Referral"
 
 class ProfileStatusEnum(enum.Enum):
     onboarded = "onboarded"

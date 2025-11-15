@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/services/api';
 import RoleGuard from '@/components/RoleGuard';
@@ -16,6 +16,7 @@ interface Requirement {
   created_at: string;
   updated_at: string;
   priority?: string;
+  company_name?: string;
 }
 
 interface Recruiter {
@@ -31,6 +32,8 @@ const AdminRFHPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [companyFilter, setCompanyFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const router = useRouter();
 
   useEffect(() => {
@@ -45,18 +48,9 @@ const AdminRFHPage: React.FC = () => {
         api.get('/users/recruiters')
       ]);
       
-      // Sort requirements: priority first, then unassigned first, then by creation date (newest first)
+      // Sort requirements: unassigned first (by created_at DESC), then assigned (by created_at DESC)
       const sortedRequirements = requirementsData.sort((a: Requirement, b: Requirement) => {
-        // Priority sorting (Urgent > High > Medium > Low > None)
-        const priorityOrder = {'Urgent': 1, 'High': 2, 'Medium': 3, 'Low': 4};
-        const aPriority = a.priority ? (priorityOrder[a.priority] || 5) : 5;
-        const bPriority = b.priority ? (priorityOrder[b.priority] || 5) : 5;
-        
-        if (aPriority !== bPriority) {
-          return aPriority - bPriority;
-        }
-        
-        // Check if requirement is unassigned (same priority, now sort by assignment)
+        // Check if requirement is unassigned
         const aAssignedRecruiters = a.assigned_recruiters || [];
         const bAssignedRecruiters = b.assigned_recruiters || [];
         const aIsUnassigned = !a.assigned_to || aAssignedRecruiters.length === 0;
@@ -117,6 +111,42 @@ const AdminRFHPage: React.FC = () => {
     });
   };
 
+  // Memoized unique companies and priorities
+  const uniqueCompanies = useMemo(() => {
+    const companies = new Set<string>();
+    requirements.forEach(req => {
+      if (req.company_name) {
+        companies.add(req.company_name);
+      }
+    });
+    return Array.from(companies).sort();
+  }, [requirements]);
+
+  const uniquePriorities = useMemo(() => {
+    const priorities = new Set<string>();
+    requirements.forEach(req => {
+      if (req.priority) {
+        priorities.add(req.priority);
+      }
+    });
+    return Array.from(priorities).sort();
+  }, [requirements]);
+
+  // Memoized filtered requirements
+  const filteredRequirements = useMemo(() => {
+    return requirements.filter(req => {
+      // Company filter
+      if (companyFilter !== 'all' && req.company_name !== companyFilter) {
+        return false;
+      }
+      // Priority filter
+      if (priorityFilter !== 'all' && req.priority !== priorityFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [requirements, companyFilter, priorityFilter]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -163,7 +193,40 @@ const AdminRFHPage: React.FC = () => {
                     Title
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priority
+                    <div className="flex flex-col">
+                      <span className="mb-1">Company</span>
+                      <select
+                        value={companyFilter}
+                        onChange={(e) => setCompanyFilter(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="all">All</option>
+                        {uniqueCompanies.map((company) => (
+                          <option key={company} value={company}>
+                            {company}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <div className="flex flex-col">
+                      <span className="mb-1">Priority</span>
+                      <select
+                        value={priorityFilter}
+                        onChange={(e) => setPriorityFilter(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="all">All</option>
+                        {uniquePriorities.map((priority) => (
+                          <option key={priority} value={priority}>
+                            {priority}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Assign Recruiters
@@ -174,7 +237,7 @@ const AdminRFHPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {requirements.map((requirement) => (
+                {filteredRequirements.map((requirement) => (
                   <tr key={requirement.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center space-x-2">
@@ -194,6 +257,11 @@ const AdminRFHPage: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900 max-w-xs truncate">
                         {requirement.job_title || requirement.email_subject}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {requirement.company_name || '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -273,6 +341,12 @@ const AdminRFHPage: React.FC = () => {
             </table>
           </div>
         </div>
+
+        {filteredRequirements.length === 0 && requirements.length > 0 && (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No requirements match the selected filters.</p>
+          </div>
+        )}
 
         {requirements.length === 0 && (
           <div className="text-center py-8">

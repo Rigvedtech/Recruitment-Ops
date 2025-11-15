@@ -78,6 +78,12 @@ const TrackerPage: React.FC = () => {
   const [archivedRequirements, setArchivedRequirements] = useState<any[]>([])
   const [showArchived, setShowArchived] = useState(false)
   
+  // Loading states for lazy-loaded tabs
+  const [loadingClosed, setLoadingClosed] = useState(false)
+  const [loadingOnHold, setLoadingOnHold] = useState(false)
+  const [loadingArchived, setLoadingArchived] = useState(false)
+  const [loadingTable, setLoadingTable] = useState(false)
+  
   // View JD Modal state
   const [showViewJDModal, setShowViewJDModal] = useState(false)
   // Pagination
@@ -172,20 +178,19 @@ const TrackerPage: React.FC = () => {
 
   const fetchTrackerData = async () => {
     try {
-      setLoading(true)
-      const [requirementsData, statsData, closedData] = await Promise.all([
+      setLoadingTable(true)
+      const [requirementsData, statsData] = await Promise.all([
         api.get('/tracker'),
-        api.get('/tracker/stats'),
-        api.get('/tracker/closed')
+        api.get('/tracker/stats')
       ])
       setRequirements(requirementsData)
       setStats(statsData)
-      // Store closed requirements separately
-      setClosedRequirements(closedData)
+      // Don't fetch closed requirements initially - lazy load when clicked
     } catch (err) {
       setError('Failed to fetch tracker data')
       console.error('Error fetching tracker data:', err)
     } finally {
+      setLoadingTable(false)
       setLoading(false)
     }
   }
@@ -225,13 +230,37 @@ const TrackerPage: React.FC = () => {
     }
   }
 
-  const fetchArchivedRequirements = async () => {
+  const fetchClosedRequirements = async () => {
+    if (closedRequirements.length > 0) return // Already loaded
     try {
+      setLoadingClosed(true)
+      const closedData = await api.get('/tracker/closed')
+      setClosedRequirements(closedData)
+    } catch (err) {
+      console.error('Error fetching closed requirements:', err)
+      alert('Failed to load closed requirements. Please try again.')
+    } finally {
+      setLoadingClosed(false)
+    }
+  }
+
+  const fetchOnHoldRequirements = async () => {
+    // On-hold requirements are already in the main requirements list
+    // Just filter them client-side
+    return
+  }
+
+  const fetchArchivedRequirements = async () => {
+    if (archivedRequirements.length > 0) return // Already loaded
+    try {
+      setLoadingArchived(true)
       const archivedData = await api.get('/tracker/archived')
       setArchivedRequirements(archivedData)
     } catch (err) {
       console.error('Error fetching archived requirements:', err)
-      // Don't show error for archived requirements as it's not critical
+      alert('Failed to load archived requirements. Please try again.')
+    } finally {
+      setLoadingArchived(false)
     }
   }
 
@@ -394,31 +423,6 @@ const TrackerPage: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-600 text-center">
-          <p className="text-xl font-semibold mb-2">Error</p>
-          <p>{error}</p>
-          <button 
-            onClick={fetchTrackerData}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Retry
-          </button>
-        </div>
       </div>
     )
   }
@@ -629,24 +633,32 @@ const TrackerPage: React.FC = () => {
             On boarding ({stats?.on_boarding || 0})
           </button>
           <button
-            onClick={() => setFilterStatus('on hold')}
+            onClick={() => {
+              setFilterStatus('on hold')
+              fetchOnHoldRequirements()
+            }}
+            disabled={loadingOnHold}
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'on hold' 
                 ? 'bg-red-600 text-white' 
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-            }`}
+            } ${loadingOnHold ? 'opacity-50 cursor-wait' : ''}`}
           >
-            On Hold ({stats?.on_hold || 0})
+            {loadingOnHold ? 'Loading...' : `On Hold (${stats?.on_hold || 0})`}
           </button>
           <button
-            onClick={() => setFilterStatus('closed')}
+            onClick={() => {
+              setFilterStatus('closed')
+              fetchClosedRequirements()
+            }}
+            disabled={loadingClosed}
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'closed' 
                 ? 'bg-gray-600 text-white' 
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-            }`}
+            } ${loadingClosed ? 'opacity-50 cursor-wait' : ''}`}
           >
-            Closed ({stats?.closed || 0})
+            {loadingClosed ? 'Loading...' : `Closed (${stats?.closed || 0})`}
           </button>
           {/* Archived button - Only visible to admins */}
           {currentUser?.role === 'admin' && (
@@ -658,13 +670,14 @@ const TrackerPage: React.FC = () => {
                 }
                 setFilterStatus('all') // Reset other filters when viewing archived
               }}
+              disabled={loadingArchived && !showArchived}
               className={`px-3 py-1.5 rounded-md text-sm font-medium ${
                 showArchived 
                   ? 'bg-orange-600 text-white' 
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-              }`}
+              } ${loadingArchived && !showArchived ? 'opacity-50 cursor-wait' : ''}`}
             >
-              {showArchived ? 'Show Active' : `Archived (${archivedRequirements.length})`}
+              {loadingArchived && !showArchived ? 'Loading...' : showArchived ? 'Show Active' : `Archived (${archivedRequirements.length})`}
             </button>
           )}
         </div>
@@ -859,8 +872,37 @@ const TrackerPage: React.FC = () => {
       <div className="mb-4">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Requirements</h2>
       </div>
+      
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <svg className="h-5 w-5 text-red-400 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <p className="text-sm font-medium text-red-800">{error}</p>
+            </div>
+            <button 
+              onClick={fetchTrackerData}
+              className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+      
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
+          {loadingTable ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading requirements...</p>
+              </div>
+            </div>
+          ) : (
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
@@ -1146,6 +1188,7 @@ const TrackerPage: React.FC = () => {
               ))}
             </tbody>
           </table>
+          )}
         </div>
       </div>
 
@@ -1207,7 +1250,7 @@ const TrackerPage: React.FC = () => {
         </div>
       )}
 
-      {filteredRequirements.length === 0 && (
+      {!loadingTable && filteredRequirements.length === 0 && (
         <div className="text-center py-8">
           <p className="text-gray-500">No requirements found for the selected filter.</p>
         </div>
