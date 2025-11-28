@@ -1053,6 +1053,21 @@ def create_requirement():
         get_db_session().add(new_requirement)
         get_db_session().commit()
         
+        # Initialize SLA tracking for the 'open' step
+        try:
+            from app.services.sla_service import SLAService
+            from app.models.requirement import RequirementStatusEnum
+            current_status = new_requirement.status.value if new_requirement.status else 'Open'
+            user_id = str(new_requirement.user_id) if new_requirement.user_id else None
+            started_trackers = SLAService.auto_start_workflow_steps(
+                requirement_id=str(new_requirement.requirement_id),
+                current_status=current_status,
+                user_id=user_id
+            )
+            current_app.logger.info(f"Auto-started {len(started_trackers)} SLA tracking entries for new requirement {new_requirement.requirement_id}")
+        except Exception as e:
+            current_app.logger.error(f"Error auto-starting SLA tracking for new requirement {new_requirement.requirement_id}: {str(e)}")
+        
         current_app.logger.info(f"Created new manual requirement: {new_requirement.requirement_id} with is_manual_requirement={new_requirement.is_manual_requirement}")
         return jsonify({
             'success': True,
@@ -1100,6 +1115,21 @@ def force_create_requirement():
         
         get_db_session().add(new_requirement)
         get_db_session().commit()
+        
+        # Initialize SLA tracking for the 'open' step
+        try:
+            from app.services.sla_service import SLAService
+            from app.models.requirement import RequirementStatusEnum
+            current_status = new_requirement.status.value if new_requirement.status else 'Open'
+            user_id = str(new_requirement.user_id) if new_requirement.user_id else None
+            started_trackers = SLAService.auto_start_workflow_steps(
+                requirement_id=str(new_requirement.requirement_id),
+                current_status=current_status,
+                user_id=user_id
+            )
+            current_app.logger.info(f"Auto-started {len(started_trackers)} SLA tracking entries for force-created requirement {new_requirement.requirement_id}")
+        except Exception as e:
+            current_app.logger.error(f"Error auto-starting SLA tracking for force-created requirement {new_requirement.requirement_id}: {str(e)}")
         
         current_app.logger.info(f"Force created new manual requirement: {new_requirement.requirement_id} with is_manual_requirement={new_requirement.is_manual_requirement}")
         return jsonify({
@@ -1957,6 +1987,146 @@ def get_current_user():
             'message': 'Failed to get current user'
         }), 500
 
+@api_bp.route('/auth/current-user', methods=['PUT'])
+@require_jwt_domain_auth
+def update_current_user():
+    """Update current authenticated user profile with JWT and domain isolation"""
+    try:
+        # Get user info from JWT (SimpleNamespace)
+        jwt_user = getattr(request, 'current_user', None)
+        if not jwt_user:
+            return jsonify({
+                'status': 'error',
+                'message': 'User not found'
+            }), 404
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No data provided'
+            }), 400
+        
+        # Get domain-specific database session
+        from flask import g
+        if not hasattr(g, 'db_session') or g.db_session is None:
+            current_app.logger.error("No database session available for domain")
+            return jsonify({
+                'status': 'error',
+                'message': 'Database session not available for this domain'
+            }), 503
+        
+        session = g.db_session
+        
+        # Fetch actual User model instance from database (needed for check_password and set_password methods)
+        user = session.query(User).filter_by(user_id=jwt_user.user_id).first()
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'message': 'User not found in database'
+            }), 404
+        
+        updated = False
+        
+        # Update full_name if provided
+        if 'full_name' in data and data['full_name']:
+            user.full_name = data['full_name']
+            updated = True
+        
+        # Update username if provided
+        if 'username' in data and data['username']:
+            new_username = data['username'].strip()
+            if new_username != user.username:
+                # Check if username already exists
+                existing_user = session.query(User).filter(
+                    User.username == new_username,
+                    User.user_id != user.user_id
+                ).first()
+                if existing_user:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Username already exists'
+                    }), 409
+                user.username = new_username
+                updated = True
+        
+        # Update phone_number if provided
+        if 'phone_number' in data:
+            phone_number = data['phone_number']
+            if phone_number is not None and phone_number != '':
+                phone_str = str(phone_number).strip()
+                # Validate phone number format (10 digits)
+                if not phone_str.isdigit() or len(phone_str) != 10:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Phone number must be a 10-digit number'
+                    }), 400
+                # Check if phone number already exists
+                existing_user = session.query(User).filter(
+                    User.phone_number == int(phone_str),
+                    User.user_id != user.user_id
+                ).first()
+                if existing_user:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Phone number already exists'
+                    }), 409
+                user.phone_number = int(phone_str)
+            else:
+                user.phone_number = None
+            updated = True
+        
+        # Update password if provided
+        if 'password' in data and data['password']:
+            new_password = data['password']
+            current_password = data.get('current_password')
+            
+            # Require current password for password change
+            if not current_password:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Current password is required to change password'
+                }), 400
+            
+            # Verify current password
+            if not user.check_password(current_password):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Current password is incorrect'
+                }), 401
+            
+            # Validate new password length
+            if len(new_password) < 6:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Password must be at least 6 characters long'
+                }), 400
+            
+            # Set new password (will be hashed)
+            user.set_password(new_password)
+            updated = True
+        
+        if updated:
+            # Update updated_at timestamp
+            user.updated_at = datetime.utcnow()
+            session.commit()
+            current_app.logger.info(f"User profile updated: {user.username}")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Profile updated successfully',
+            'user': user.to_dict()
+        }), 200
+            
+    except Exception as e:
+        current_app.logger.error(f"Error updating current user: {str(e)}")
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            g.db_session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to update profile'
+        }), 500
+
 @api_bp.route('/auth/send-otp', methods=['POST'])
 def send_otp():
     """Send OTP to email for verification"""
@@ -2100,6 +2270,178 @@ def verify_otp():
         return jsonify({
             'status': 'error',
             'message': 'Failed to verify OTP'
+        }), 500
+
+@api_bp.route('/auth/forgot-password', methods=['POST'])
+def forgot_password():
+    """Send OTP to email for password reset"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({
+                'status': 'error',
+                'message': 'Email is required'
+            }), 400
+        
+        # Get domain-specific database session
+        from flask import g
+        if not hasattr(g, 'db_session') or g.db_session is None:
+            # Try to ensure domain isolation
+            if not ensure_domain_isolation():
+                current_app.logger.error("Failed to ensure domain database isolation")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Database not available for this domain'
+                }), 503
+            session = g.db_session
+        else:
+            session = g.db_session
+        
+        # Check if user exists with this email
+        user = session.query(User).filter_by(email=email).first()
+        if not user:
+            # Don't reveal if email exists or not for security
+            return jsonify({
+                'status': 'success',
+                'message': 'If the email exists, an OTP has been sent'
+            }), 200
+        
+        # Generate 6-digit OTP
+        import random
+        otp = random.randint(100000, 999999)
+        
+        # Store OTP in user record
+        from datetime import datetime, timedelta
+        otp_expiry = datetime.utcnow() + timedelta(minutes=10)  # OTP expires in 10 minutes
+        
+        user.otp = otp
+        user.otp_expiry_time = otp_expiry
+        session.commit()
+        
+        # Send OTP via email
+        try:
+            from app.services.email_service import EmailService
+            email_service = EmailService()
+            
+            subject = "Password Reset OTP"
+            html_content = f"""
+            <html>
+            <body>
+                <h2>Password Reset Request</h2>
+                <p>You have requested to reset your password.</p>
+                <p>Your verification code is: <strong>{otp}</strong></p>
+                <p>This code will expire in 10 minutes.</p>
+                <p>If you did not request this code, please ignore this email.</p>
+            </body>
+            </html>
+            """
+            
+            email_sent = email_service.send_email(email, subject, html_content)
+            
+            if email_sent:
+                return jsonify({
+                    'status': 'success',
+                    'message': 'If the email exists, an OTP has been sent'
+                }), 200
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to send OTP email'
+                }), 500
+                
+        except Exception as e:
+            current_app.logger.error(f"Error sending password reset OTP email: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to send OTP email'
+            }), 500
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in forgot_password: {str(e)}")
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            g.db_session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to process password reset request'
+        }), 500
+
+@api_bp.route('/auth/reset-password', methods=['POST'])
+def reset_password():
+    """Reset password using OTP"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        otp = data.get('otp')
+        new_password = data.get('new_password')
+        
+        if not email or not otp or not new_password:
+            return jsonify({
+                'status': 'error',
+                'message': 'Email, OTP, and new password are required'
+            }), 400
+        
+        # Validate new password length
+        if len(new_password) < 6:
+            return jsonify({
+                'status': 'error',
+                'message': 'Password must be at least 6 characters long'
+            }), 400
+        
+        # Get domain-specific database session
+        from flask import g
+        if not hasattr(g, 'db_session') or g.db_session is None:
+            # Try to ensure domain isolation
+            if not ensure_domain_isolation():
+                current_app.logger.error("Failed to ensure domain database isolation")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Database not available for this domain'
+                }), 503
+            session = g.db_session
+        else:
+            session = g.db_session
+        
+        # Find user with the email and OTP
+        user = session.query(User).filter_by(email=email, otp=otp).first()
+        
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid OTP or email'
+            }), 400
+        
+        # Check if OTP has expired
+        from datetime import datetime
+        if user.otp_expiry_time and user.otp_expiry_time < datetime.utcnow():
+            user.otp = None
+            user.otp_expiry_time = None
+            session.commit()
+            return jsonify({
+                'status': 'error',
+                'message': 'OTP has expired'
+            }), 400
+        
+        # Reset password
+        user.set_password(new_password)
+        user.otp = None
+        user.otp_expiry_time = None
+        session.commit()
+        
+        current_app.logger.info(f"Password reset successful for user: {user.username}")
+        return jsonify({
+            'status': 'success',
+            'message': 'Password reset successfully'
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in reset_password: {str(e)}")
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            g.db_session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to reset password'
         }), 500
 
 @api_bp.route('/users', methods=['GET'])

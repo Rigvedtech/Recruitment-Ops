@@ -372,8 +372,8 @@ class SLAService:
         
         # Map status to workflow steps
         status_to_steps = {
-            'Open': [StepNameEnum.candidate_submission],
-            'Candidate_Submission': [StepNameEnum.screening],
+            'Open': [StepNameEnum.open],  # Track 'open' step when requirement is in Open status
+            'Candidate_Submission': [StepNameEnum.candidate_submission],
             'Interview_Scheduled': [StepNameEnum.interview_round_1],
             'Offer_Recommendation': [StepNameEnum.offered],
             'On_Boarding': [StepNameEnum.onboarding]

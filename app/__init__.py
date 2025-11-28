@@ -14,6 +14,7 @@ from app.routes.notification_api import notification_bp
 from app.routes.domain_resolver_api import domain_resolver_api_bp
 from app.routes.domain_test_api import domain_test_bp
 from app.routes.redis_health_api import redis_health_bp
+from app.routes.costing_api import costing_bp
 from app.database import init_db, db
 from app.services.sla_service import SLAService
 from app.middleware.domain_db_resolver import domain_db_resolver
@@ -35,6 +36,7 @@ def create_app(config_name='default'):
     app.config.from_object(Config)
 
     # Initialize CORS with security settings
+    # Configure CORS to work properly with Hypercorn
     CORS(app, 
          origins=[
             'http://rigved-rops.rigvedtech.com:3000',
@@ -46,10 +48,14 @@ def create_app(config_name='default'):
              'http://finq-ops.rigvedtech.com:3000',
              'http://localhost:3000',
              'http://localhost:6969',
-             'http://127.0.0.1:3000'
+             'http://127.0.0.1:3000',
+             'http://127.0.0.1:6969'
          ],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-         allow_headers=['Content-Type', 'Authorization', 'X-Original-Domain', 'X-Domain']
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+         allow_headers=['Content-Type', 'Authorization', 'X-Original-Domain', 'X-Domain'],
+         supports_credentials=True,
+         expose_headers=None,
+         max_age=3600
     )
     
     # Initialize JWT Manager
@@ -108,6 +114,7 @@ def create_app(config_name='default'):
     app.register_blueprint(domain_resolver_api_bp)  # Register domain resolver API routes
     app.register_blueprint(domain_test_bp)  # Register domain test API routes
     app.register_blueprint(redis_health_bp)  # Register Redis health API routes
+    app.register_blueprint(costing_bp)  # Register costing API routes
 
     # Configure and start APScheduler
     app.config['SCHEDULER_API_ENABLED'] = False  # Disable built-in API routes to avoid conflicts
@@ -127,14 +134,51 @@ def create_app(config_name='default'):
     else:
         print("APScheduler disabled for migration/testing mode.")
     
+    # Handle OPTIONS preflight requests explicitly (Flask-CORS should handle this, but ensure it works with Hypercorn)
+    @app.before_request
+    def handle_options_preflight():
+        """Explicitly handle OPTIONS preflight requests for CORS"""
+        from flask import request, make_response
+        if request.method == 'OPTIONS':
+            origin = request.headers.get('Origin', '')
+            allowed_origins = [
+                'http://rigved-rops.rigvedtech.com:3000',
+                'https://rigved-rops.rigvedtech.com:3000',
+                'http://rgvdit-rops.rigvedtech.com:3000',
+                'https://rgvdit-rops.rigvedtech.com:3000',
+                'http://finquest-rops.rigvedtech.com:3000',
+                'https://finquest-rops.rigvedtech.com:3000',
+                'http://finq-ops.rigvedtech.com:3000',
+                'http://localhost:3000',
+                'http://localhost:6969',
+                'http://127.0.0.1:3000',
+                'http://127.0.0.1:6969'
+            ]
+            
+            # Check if origin is allowed
+            is_allowed = origin in allowed_origins or (origin and ('localhost' in origin or '127.0.0.1' in origin))
+            
+            if is_allowed:
+                response = make_response('', 200)
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Original-Domain, X-Domain'
+                response.headers['Access-Control-Max-Age'] = '3600'
+                return response
+    
     # Add domain isolation middleware for API requests
     @app.before_request
     def setup_domain_isolation():
         """Ensure domain-specific database session is available for API requests"""
         from flask import request
         import logging
-        
+            
         logger = logging.getLogger(__name__)
+        
+        # Skip OPTIONS requests (already handled above)
+        if request.method == 'OPTIONS':
+            return
         
         # Skip for static files and non-API endpoints
         if (request.endpoint and 
@@ -146,10 +190,9 @@ def create_app(config_name='default'):
         if request.path.startswith(('/api/domain/', '/api/domain-test/')):
             return
         
-        # Get domain from headers
-        domain = request.headers.get('X-Original-Domain')
-        if not domain:
-            domain = request.headers.get('X-Domain')
+        # Get domain using the same extraction logic as database_manager
+        # This includes fallback to Host header if custom headers are not present
+        domain = database_manager.get_domain_from_request()
         
         # Log the request for debugging
         logger.info(f"API Request: {request.method} {request.path}, Domain: {domain}")
@@ -160,7 +203,6 @@ def create_app(config_name='default'):
                 logger.info(f"Setting up domain isolation for: {domain}")
                 
                 # Ensure domain database isolation is set up
-                from app.services.database_manager import database_manager
                 success = database_manager.ensure_domain_database_isolation()
                 
                 if success:
@@ -176,14 +218,54 @@ def create_app(config_name='default'):
         else:
             logger.debug(f"Using default database for domain: {domain}")
     
-    # Add security headers
+    # Add CORS headers as fallback (Flask-CORS should handle this, but ensure it works with Hypercorn)
     @app.after_request
-    def add_security_headers(response):
+    def add_cors_and_security_headers(response):
+        from flask import request
+        # Get the origin from the request
+        origin = request.headers.get('Origin')
+        
+        # Check if origin is in allowed origins
+        allowed_origins = [
+            'http://rigved-rops.rigvedtech.com:3000',
+            'https://rigved-rops.rigvedtech.com:3000',
+            'http://rgvdit-rops.rigvedtech.com:3000',
+            'https://rgvdit-rops.rigvedtech.com:3000',
+            'http://finquest-rops.rigvedtech.com:3000',
+            'https://finquest-rops.rigvedtech.com:3000',
+            'http://finq-ops.rigvedtech.com:3000',
+            'http://localhost:3000',
+            'http://localhost:6969',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:6969'
+        ]
+        
+        # Ensure CORS headers are set (Flask-CORS should do this, but ensure it works)
+        if origin:
+            # Check if origin is allowed (exact match or localhost variant)
+            if origin in allowed_origins or (origin and ('localhost' in origin or '127.0.0.1' in origin)):
+                # Only set if not already set by Flask-CORS
+                if 'Access-Control-Allow-Origin' not in response.headers:
+                    response.headers['Access-Control-Allow-Origin'] = origin
+                if 'Access-Control-Allow-Credentials' not in response.headers:
+                    response.headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        # Ensure CORS headers for OPTIONS requests
+        if request.method == 'OPTIONS':
+            if 'Access-Control-Allow-Methods' not in response.headers:
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            if 'Access-Control-Allow-Headers' not in response.headers:
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Original-Domain, X-Domain'
+            if 'Access-Control-Max-Age' not in response.headers:
+                response.headers['Access-Control-Max-Age'] = '3600'
+        
+        # Security headers
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'
+        
         return response
 
     # Print registered routes for debugging

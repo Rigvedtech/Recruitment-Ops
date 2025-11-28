@@ -57,13 +57,17 @@ const SLAConfigPage: React.FC = () => {
       'Content-Type': 'application/json',
     };
 
-    const user = localStorage.getItem('user');
-    if (user) {
-      try {
-        const userData = JSON.parse(user);
-        headers['Authorization'] = `Bearer ${userData.username}`;
-      } catch (e) {
-        console.error('Error parsing user data:', e);
+    if (typeof window !== 'undefined') {
+      const user = localStorage.getItem('user');
+      if (user) {
+        try {
+          const userData = JSON.parse(user);
+          // Use access_token (JWT) if available, fallback to username for backwards compatibility
+          const token = localStorage.getItem('access_token');
+          headers['Authorization'] = `Bearer ${token || userData.access_token || userData.username}`;
+        } catch (e) {
+          console.error('Error parsing user data:', e);
+        }
       }
     }
 
@@ -151,8 +155,10 @@ const SLAConfigPage: React.FC = () => {
 
   const initializeDefaults = async () => {
     try {
+      const headers = getAuthHeaders();
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://20.188.122.171:1976/api'}/sla/config/initialize`, {
         method: 'POST',
+        headers,
       });
       
       if (response.ok) {

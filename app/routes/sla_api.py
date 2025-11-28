@@ -246,8 +246,8 @@ def auto_start_workflow_steps(requirement_id):
         
         started_trackers = SLAService.auto_start_workflow_steps(
             requirement_id=str(requirement.requirement_id),
-            current_status=requirement.status if requirement.status else 'Open',
-            user_id=user_id
+            current_status=requirement.status.value if requirement.status else 'Open',
+            user_id=str(user_id) if user_id else None
         )
         
         return jsonify({
@@ -272,8 +272,8 @@ def auto_start_workflow_steps_by_request(request_id):
         
         started_trackers = SLAService.auto_start_workflow_steps(
             requirement_id=str(requirement.requirement_id),
-            current_status=requirement.status if requirement.status else 'Open',
-            user_id=user_id
+            current_status=requirement.status.value if requirement.status else 'Open',
+            user_id=str(user_id) if user_id else None
         )
         
         return jsonify({
@@ -285,6 +285,82 @@ def auto_start_workflow_steps_by_request(request_id):
         return jsonify({'error': 'Failed to auto-start SLA tracking'}), 500
 
 # SLA Dashboard Endpoints
+@sla_bp.route('/backfill/open-steps', methods=['POST'])
+@require_domain_auth
+def backfill_open_steps():
+    """Backfill missing 'open' step trackers for existing requirements with 'Open' status"""
+    try:
+        from app.models.requirement import Requirement, RequirementStatusEnum
+        from app.models.sla_tracker import SLATracker, SLAStatusEnum
+        from app.models.sla_config import StepNameEnum, SLAConfig
+        
+        # Get all requirements with 'Open' status that don't have an 'open' step tracker
+        open_requirements = get_db_session().query(Requirement).filter(
+            Requirement.status == RequirementStatusEnum.Open,
+            Requirement.deleted_at.is_(None)
+        ).all()
+        
+        backfilled_count = 0
+        skipped_count = 0
+        errors = []
+        
+        for requirement in open_requirements:
+            try:
+                # Check if 'open' step tracker already exists
+                existing_tracker = get_db_session().query(SLATracker).filter_by(
+                    requirement_id=requirement.requirement_id,
+                    step_name=StepNameEnum.open.value,
+                    step_completed_at=None
+                ).first()
+                
+                if existing_tracker:
+                    skipped_count += 1
+                    continue
+                
+                # Get SLA config for 'open' step
+                config = SLAConfig.get_config_by_step(StepNameEnum.open)
+                if not config:
+                    current_app.logger.warning(f"No SLA config found for 'open' step, skipping requirement {requirement.requirement_id}")
+                    errors.append(f"Requirement {requirement.request_id}: No SLA config for 'open' step")
+                    continue
+                
+                # Create 'open' step tracker with requirement's created_at as start time
+                tracker = SLATracker(
+                    requirement_id=requirement.requirement_id,
+                    step_name=StepNameEnum.open,
+                    step_started_at=requirement.created_at or datetime.utcnow(),
+                    sla_hours=config.sla_hours,
+                    sla_days=config.sla_days,
+                    user_id=requirement.user_id,
+                    sla_status=SLAStatusEnum.pending
+                )
+                
+                # Calculate initial metrics
+                tracker.calculate_sla_metrics()
+                
+                get_db_session().add(tracker)
+                backfilled_count += 1
+                
+            except Exception as e:
+                error_msg = f"Error backfilling requirement {requirement.request_id}: {str(e)}"
+                current_app.logger.error(error_msg)
+                errors.append(error_msg)
+        
+        get_db_session().commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Backfilled {backfilled_count} requirements, skipped {skipped_count} (already have trackers)',
+            'backfilled_count': backfilled_count,
+            'skipped_count': skipped_count,
+            'errors': errors if errors else None
+        }), 200
+        
+    except Exception as e:
+        get_db_session().rollback()
+        current_app.logger.error(f"Error in backfill_open_steps: {str(e)}")
+        return jsonify({'error': 'Failed to backfill open steps'}), 500
+
 @sla_bp.route('/dashboard/global-metrics', methods=['GET'])
 def get_global_sla_metrics():
     """Get global SLA metrics for dashboard"""

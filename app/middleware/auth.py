@@ -1,7 +1,25 @@
 from functools import wraps
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, g
 from app.models.user import User
 from app.database import db
+
+def get_db_session():
+    """
+    Get the correct database session for the current domain.
+    Returns domain-specific session if available, otherwise falls back to global session.
+    """
+    try:
+        # Check if we have a domain-specific session
+        if hasattr(g, 'db_session') and g.db_session is not None:
+            # Verify it's a valid session object
+            if hasattr(g.db_session, 'query'):
+                return g.db_session
+        
+        # Fallback to global session
+        return db.session
+    except Exception as e:
+        current_app.logger.error(f"Error in get_db_session: {str(e)}")
+        return db.session
 
 def require_auth(f):
     """Decorator to require authentication"""
@@ -24,8 +42,9 @@ def require_auth(f):
             
             username = parts[1]
             
-            # Find user
-            user = User.query.filter_by(username=username).first()
+            # Get session and find user
+            session = get_db_session()
+            user = session.query(User).filter_by(username=username).first()
             
             if not user:
                 return jsonify({'error': 'User not found'}), 401

@@ -1755,11 +1755,42 @@ def get_profiles_count():
                     assigned_recruiters_map[req_id_str] = []
                 assigned_recruiters_map[req_id_str].append(row.username)
             
-            # OPTIMIZATION 3: Batch fetch breach times using a single query
+            # OPTIMIZATION 3: Update in-progress metrics first to ensure real-time accuracy
             from app.models.sla_tracker import SLATracker, SLAStatusEnum
+            try:
+                SLATracker.update_in_progress_metrics()
+                current_app.logger.debug("Updated in-progress SLA metrics before querying breach times")
+            except Exception as e:
+                current_app.logger.warning(f"Error updating in-progress metrics: {str(e)}")
+            
+            # Batch fetch breach times using a single query
             from sqlalchemy.sql import func as sqlfunc
+            from datetime import datetime
+            
+            # Get all in-progress trackers for these requirements
+            in_progress_trackers = get_db_session().query(SLATracker).filter(
+                SLATracker.requirement_id.in_(requirement_ids),
+                SLATracker.step_completed_at.is_(None)
+            ).all()
+            
+            # Calculate breach hours for in-progress steps that are actually breaching
+            for tracker in in_progress_trackers:
+                if tracker.step_started_at:
+                    current_duration = (datetime.utcnow() - tracker.step_started_at).total_seconds() / 3600
+                    if current_duration > tracker.sla_hours:
+                        # This step is breaching, update its metrics
+                        tracker.calculate_sla_metrics()
+                        get_db_session().add(tracker)
+            
+            # Commit the updated metrics
+            try:
+                get_db_session().commit()
+            except Exception as e:
+                current_app.logger.warning(f"Error committing updated SLA metrics: {str(e)}")
+                get_db_session().rollback()
             
             # Subquery to get the max breach hours for each requirement
+            # Now includes both marked as breached and in-progress steps that are actually breaching
             max_breach_subquery = get_db_session().query(
                 SLATracker.requirement_id,
                 sqlfunc.max(SLATracker.sla_breach_hours).label('max_breach_hours')

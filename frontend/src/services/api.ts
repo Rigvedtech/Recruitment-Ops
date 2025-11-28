@@ -238,6 +238,19 @@ export const getRecruitmentReport = async (params: { date_from?: string; date_to
     return response.json();
 };
 
+export const getInternalTrackerReport = async (params: { date_from?: string; date_to?: string }) => {
+    const headers = getAuthHeaders();
+    const search = new URLSearchParams();
+    if (params.date_from) search.append('date_from', params.date_from);
+    if (params.date_to) search.append('date_to', params.date_to);
+    const qs = search.toString() ? `?${search.toString()}` : '';
+    const response = await fetch(getApiUrl(`/reports/internal-tracker${qs}`), { headers });
+    if (!response.ok) {
+        throw new Error('Failed to generate report');
+    }
+    return response.json();
+};
+
 export const getStudent = async (id: number) => {
     try {
         const response = await axiosApi.get(`/students/${id}`);
@@ -454,6 +467,65 @@ export async function recruiterLogin(username: string, password: string) {
 
     if (!response.ok) {
         throw new Error(`Failed to post to /recruiter/login`);
+    }
+
+    return response.json();
+}
+
+// Update user profile function
+export async function updateUserProfile(updateData: {
+    full_name?: string;
+    username?: string;
+    phone_number?: string;
+    password?: string;
+    current_password?: string;
+}) {
+    const headers = getAuthHeaders();
+    const response = await fetch(getApiUrl('/auth/current-user'), {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(updateData),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to update profile');
+    }
+
+    return response.json();
+}
+
+// Forgot password - send OTP
+export async function forgotPassword(email: string) {
+    const response = await fetch(getApiUrl('/auth/forgot-password'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to send password reset OTP');
+    }
+
+    return response.json();
+}
+
+// Reset password with OTP
+export async function resetPassword(email: string, otp: string, newPassword: string) {
+    const response = await fetch(getApiUrl('/auth/reset-password'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, otp, new_password: newPassword }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to reset password');
     }
 
     return response.json();
@@ -760,6 +832,114 @@ export const api = {
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || `Failed to validate profile movement`);
+        }
+
+        return response.json();
+    },
+
+    // Costing API methods
+    getSourceTemplates: async () => {
+        const headers = getAuthHeaders();
+        const response = await fetch(getApiUrl('/costing/source-templates'), {
+            method: 'GET',
+            headers,
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch source templates');
+        }
+
+        return response.json();
+    },
+
+    updateSourceTemplates: async (templates: any[]) => {
+        const headers = getAuthHeaders();
+        const response = await fetch(getApiUrl('/costing/source-templates'), {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ templates }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update source templates');
+        }
+
+        return response.json();
+    },
+
+    getRecruiters: async () => {
+        const headers = getAuthHeaders();
+        const response = await fetch(getApiUrl('/costing/recruiters'), {
+            method: 'GET',
+            headers,
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch recruiters');
+        }
+
+        return response.json();
+    },
+
+    calculatePerUnitCost: async (data: {
+        recruiter_id: string;
+        start_date: string;
+        end_date: string;
+        source_cost: number;
+        recruiter_salary: number;
+        infra_cost: number;
+        custom_costs: { label: string; amount: number }[];
+    }) => {
+        const headers = getAuthHeaders();
+        const response = await fetch(getApiUrl('/costing/per-unit-calculate'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to calculate per unit cost');
+        }
+
+        return response.json();
+    },
+
+    calculateMonthlyCost: async (data: {
+        start_date: string;
+        end_date: string;
+        source_cost: number;
+        recruiter_salary: number;
+        infra_cost: number;
+        custom_costs: { label: string; amount: number }[];
+    }) => {
+        const headers = getAuthHeaders();
+        const response = await fetch(getApiUrl('/costing/monthly-calculate'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to calculate monthly cost');
+        }
+
+        return response.json();
+    },
+
+    getProfileCount: async (data: {
+        recruiter_id?: string;
+        start_date: string;
+        end_date: string;
+    }) => {
+        const headers = getAuthHeaders();
+        const response = await fetch(getApiUrl('/costing/profile-count'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch profile count');
         }
 
         return response.json();

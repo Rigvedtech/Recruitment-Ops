@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import and_, func
 
 from app.database import db
-from app.models import Requirement, Profile, Screening, InterviewScheduled, InterviewRoundOne, InterviewRoundTwo, Onboarding, Meeting
+from app.models import Requirement, Profile, Screening, InterviewScheduled, InterviewRoundOne, InterviewRoundTwo, Onboarding, Meeting, User
 from app.routes.api import get_db_session
 from app.middleware.redis_performance_middleware import cache_response, cache_database_query
 
@@ -173,6 +173,145 @@ def recruitment_report():
         })
     except Exception as e:
         current_app.logger.error(f"Error generating recruitment report: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to generate report'}), 500
+
+
+@reports_bp.route('/internal-tracker', methods=['GET'])
+@cache_response(ttl=300)  # Cache for 5 minutes - reports can be slightly stale
+def internal_tracker_report():
+    """Internal tracker report showing detailed candidate information per profile.
+
+    Query params:
+      - date_from (YYYY-MM-DD) - filters by Requirement.created_at
+      - date_to   (YYYY-MM-DD) - filters by Requirement.created_at
+    """
+    try:
+        session = get_db_session()
+
+        date_from = _parse_date(request.args.get('date_from'))
+        date_to = _parse_date(request.args.get('date_to'))
+
+        # Base query: Join Profile with Requirement, filter by requirement creation date
+        query = (
+            session.query(Profile, Requirement, User)
+            .join(Requirement, Profile.requirement_id == Requirement.requirement_id)
+            .outerjoin(User, Profile.created_by_recruiter == User.user_id)
+            .filter(
+                Profile.deleted_at.is_(None),
+                Profile.is_deleted.is_(False),
+                Requirement.is_deleted.is_(False)
+            )
+        )
+
+        # Apply date filters on Requirement.created_at
+        if date_from:
+            query = query.filter(Requirement.created_at >= date_from)
+        if date_to:
+            query = query.filter(Requirement.created_at <= datetime(date_to.year, date_to.month, date_to.day, 23, 59, 59))
+
+        # Order by Requirement.created_at DESC
+        query = query.order_by(Requirement.created_at.desc())
+
+        profiles_data = query.all()
+
+        rows = []
+        for idx, (profile, requirement, recruiter) in enumerate(profiles_data, start=1):
+            # Get recruiter name
+            recruiter_name = recruiter.full_name if recruiter else None
+
+            # Check if profile was shortlisted (Screening status = 'selected')
+            screening = session.query(Screening).filter(
+                Screening.profile_id == profile.profile_id,
+                Screening.requirement_id == requirement.requirement_id,
+                Screening.is_deleted.is_(False)
+            ).first()
+            resume_shortlist = "Yes" if (screening and screening.status and screening.status.value == 'selected') else "No"
+
+            # Get Interview Round 1 date
+            interview_round_one = session.query(InterviewRoundOne).filter(
+                InterviewRoundOne.profile_id == profile.profile_id,
+                InterviewRoundOne.requirement_id == requirement.requirement_id,
+                InterviewRoundOne.is_deleted.is_(False)
+            ).first()
+            interview_round_1_date = None
+            if interview_round_one:
+                # Prefer InterviewRoundOne.start_time, fallback to Meeting.start_time
+                if interview_round_one.start_time:
+                    interview_round_1_date = interview_round_one.start_time.strftime('%Y-%m-%d')
+                elif interview_round_one.meeting_id:
+                    meeting = session.query(Meeting).filter(
+                        Meeting.meeting_id == interview_round_one.meeting_id,
+                        Meeting.is_deleted.is_(False)
+                    ).first()
+                    if meeting and meeting.start_time:
+                        interview_round_1_date = meeting.start_time.strftime('%Y-%m-%d')
+
+            # Get Interview Round 2 date
+            interview_round_two = session.query(InterviewRoundTwo).filter(
+                InterviewRoundTwo.profile_id == profile.profile_id,
+                InterviewRoundTwo.requirement_id == requirement.requirement_id,
+                InterviewRoundTwo.is_deleted.is_(False)
+            ).first()
+            interview_round_2_date = None
+            if interview_round_two:
+                # Prefer InterviewRoundTwo.start_time, fallback to Meeting.start_time
+                if interview_round_two.start_time:
+                    interview_round_2_date = interview_round_two.start_time.strftime('%Y-%m-%d')
+                elif interview_round_two.meeting_id:
+                    meeting = session.query(Meeting).filter(
+                        Meeting.meeting_id == interview_round_two.meeting_id,
+                        Meeting.is_deleted.is_(False)
+                    ).first()
+                    if meeting and meeting.start_time:
+                        interview_round_2_date = meeting.start_time.strftime('%Y-%m-%d')
+
+            # Map job_type to Contract/Permanent
+            job_type_display = ""
+            if requirement.job_type:
+                job_type_lower = requirement.job_type.lower() if isinstance(requirement.job_type, str) else requirement.job_type.value.lower() if hasattr(requirement.job_type, 'value') else ""
+                if 'contract' in job_type_lower:
+                    job_type_display = "Contract"
+                elif 'full_time' in job_type_lower or 'fulltime' in job_type_lower:
+                    job_type_display = "Permanent"
+                else:
+                    job_type_display = requirement.job_type if isinstance(requirement.job_type, str) else (requirement.job_type.value if hasattr(requirement.job_type, 'value') else "")
+
+            # Format date from Requirement.created_at
+            requirement_date = requirement.created_at.strftime('%Y-%m-%d') if requirement.created_at else None
+
+            rows.append({
+                'sr_no': idx,
+                'date': requirement_date,
+                'recruiter_name': recruiter_name,
+                'client_name': requirement.company_name,
+                'candidate_name': profile.candidate_name,
+                'requirement': requirement.job_title,
+                'contract_permanent': job_type_display,
+                'contact_number': str(profile.contact_no) if profile.contact_no else None,
+                'email_id': profile.email_id,
+                'total_exp': float(profile.total_experience) if profile.total_experience else None,
+                'relevant_exp': float(profile.relevant_experience) if profile.relevant_experience else None,
+                'current_company': profile.current_company,
+                'reason_for_job_change': "",  # Empty as per requirements
+                'location': profile.location,
+                'notice_period': profile.notice_period_days,
+                'current_ctc': float(profile.ctc_current) if profile.ctc_current else None,
+                'expected_ctc': float(profile.ctc_expected) if profile.ctc_expected else None,
+                'resume_shortlist': resume_shortlist,
+                'interview_round_1_date': interview_round_1_date,
+                'interview_round_1_feedback': "",  # Empty as per requirements
+                'interview_round_2_date': interview_round_2_date,
+                'interview_round_2_feedback': "",  # Empty as per requirements
+                'final_yn': "",  # Empty as per requirements
+                'comment': ""  # Empty as per requirements
+            })
+
+        return jsonify({
+            'success': True,
+            'data': rows
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error generating internal tracker report: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to generate report'}), 500
 
 
