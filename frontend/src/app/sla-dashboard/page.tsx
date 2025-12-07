@@ -180,43 +180,43 @@ export default function SLADashboard() {
   };
 
   const getStatusColor = (percentage: number) => {
-    if (percentage >= 90) return 'text-green-600';
-    if (percentage >= 75) return 'text-yellow-600';
-    return 'text-red-600';
+    if (percentage >= 90) return 'text-green-600 dark:text-green-400';
+    if (percentage >= 75) return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-red-600 dark:text-red-400';
   };
 
   const getStatusBgColor = (percentage: number) => {
-    if (percentage >= 90) return 'bg-green-100';
-    if (percentage >= 75) return 'bg-yellow-100';
-    return 'bg-red-100';
+    if (percentage >= 90) return 'bg-green-100 dark:bg-green-900/30';
+    if (percentage >= 75) return 'bg-yellow-100 dark:bg-yellow-900/30';
+    return 'bg-red-100 dark:bg-red-900/30';
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading SLA Dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-300">Loading SLA Dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">SLA Dashboard</h1>
-              <p className="mt-1 text-sm text-gray-500">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">SLA Dashboard</h1>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Monitor Service Level Agreement compliance and turnaround times
               </p>
             </div>
             <button
               onClick={loadDashboardData}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              className="bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium"
             >
               Refresh Data
             </button>
@@ -225,7 +225,7 @@ export default function SLADashboard() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="bg-white border-b">
+      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8">
             {[
@@ -241,8 +241,8 @@ export default function SLADashboard() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 {tab.name}
@@ -259,55 +259,55 @@ export default function SLADashboard() {
             {/* Global Metrics Cards */}
             {globalMetrics && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-lg shadow p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <div className="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
-                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-md flex items-center justify-center">
+                        <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                         </svg>
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Total Requests</p>
-                      <p className="text-2xl font-semibold text-gray-900">{globalMetrics.total_requests}</p>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Requests</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{globalMetrics.total_requests}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <div className="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
-                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-md flex items-center justify-center">
+                        <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">On Time</p>
-                      <p className="text-2xl font-semibold text-gray-900">{globalMetrics.on_time_requests}</p>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">On Time</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{globalMetrics.on_time_requests}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <div className="w-8 h-8 bg-red-100 rounded-md flex items-center justify-center">
-                        <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-md flex items-center justify-center">
+                        <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Breached</p>
-                      <p className="text-2xl font-semibold text-gray-900">{globalMetrics.breached_requests}</p>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Breached</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{globalMetrics.breached_requests}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <div className={`w-8 h-8 ${getStatusBgColor(globalMetrics.compliance_percentage)} rounded-md flex items-center justify-center`}>
@@ -317,7 +317,7 @@ export default function SLADashboard() {
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Compliance %</p>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Compliance %</p>
                       <p className={`text-2xl font-semibold ${getStatusColor(globalMetrics.compliance_percentage)}`}>
                         {globalMetrics.compliance_percentage.toFixed(1)}%
                       </p>
@@ -329,16 +329,16 @@ export default function SLADashboard() {
 
             {/* Average TAT */}
             {globalMetrics && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Average Turnaround Time</h3>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Average Turnaround Time</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <p className="text-sm text-gray-500">Average TAT (Hours)</p>
-                    <p className="text-3xl font-bold text-gray-900">{globalMetrics.average_tat_hours.toFixed(1)}h</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Average TAT (Hours)</p>
+                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{globalMetrics.average_tat_hours.toFixed(1)}h</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Average TAT (Days)</p>
-                    <p className="text-3xl font-bold text-gray-900">{globalMetrics.average_tat_days.toFixed(1)}d</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Average TAT (Days)</p>
+                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{globalMetrics.average_tat_days.toFixed(1)}d</p>
                   </div>
                 </div>
               </div>
@@ -347,35 +347,35 @@ export default function SLADashboard() {
         )}
 
         {activeTab === 'step-wise' && (
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">Step-wise Performance</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-100 dark:border-gray-700">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Step-wise Performance</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Step</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">On Time</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Breached</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Compliance %</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Duration</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Step</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">On Time</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Breached</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Compliance %</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Avg Duration</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {stepWiseMetrics.map((step, index) => (
-                    <tr key={index}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         {step.step_display_name}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {step.total_requests}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 dark:text-green-400">
                         {step.on_time_requests}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 dark:text-red-400">
                         {step.breached_requests}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -383,7 +383,7 @@ export default function SLADashboard() {
                           {step.compliance_percentage.toFixed(1)}%
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDuration(step.average_duration_hours)}
                       </td>
                     </tr>
@@ -395,45 +395,45 @@ export default function SLADashboard() {
         )}
 
         {activeTab === 'alerts' && (
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">SLA Alerts</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-100 dark:border-gray-700">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">SLA Alerts</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job Title</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Step</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Request ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Job Title</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Company</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Step</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Breach Time</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {alerts.map((alert, index) => (
-                    <tr key={index} className="bg-red-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <tr key={index} className="bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         {alert.request_id}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {alert.job_title || 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {alert.company_name || 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {alert.step_display_name}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 dark:text-red-400 font-medium">
                         {alert.breach_time_display}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {alert.assigned_recruiter || 'Unassigned'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {new Date(alert.created_at).toLocaleDateString()}
                       </td>
                     </tr>
@@ -445,28 +445,28 @@ export default function SLADashboard() {
         )}
 
         {activeTab === 'breaching' && (
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">Currently Breaching Requests</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-100 dark:border-gray-700">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Currently Breaching Requests</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Step</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Breach Time</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Started At</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Request ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Step</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Breach Time</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Started At</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Assigned To</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {breachingRequests.map((request, index) => (
-                    <tr key={index} className="bg-red-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <tr key={index} className="bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         {request.request_id}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {request.step_display_name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-medium">
@@ -490,18 +490,18 @@ export default function SLADashboard() {
           <div className="space-y-6">
             {/* Performance Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-md flex items-center justify-center">
+                      <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                       </svg>
                     </div>
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Avg Compliance (30d)</p>
-                    <p className="text-2xl font-semibold text-gray-900">
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Avg Compliance (30d)</p>
+                    <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                       {trends && trends.length > 0 
                         ? (trends.reduce((sum, t) => sum + t.compliance_percentage, 0) / trends.length).toFixed(1)
                         : '0.0'}%
@@ -510,18 +510,18 @@ export default function SLADashboard() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-md flex items-center justify-center">
+                      <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Avg TAT (30d)</p>
-                    <p className="text-2xl font-semibold text-gray-900">
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Avg TAT (30d)</p>
+                    <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                       {trends && trends.length > 0 
                         ? (trends.reduce((sum, t) => sum + t.average_tat_hours, 0) / trends.length).toFixed(1)
                         : '0.0'}h
@@ -530,18 +530,18 @@ export default function SLADashboard() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-purple-100 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-md flex items-center justify-center">
+                      <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                       </svg>
                     </div>
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Total Requests (30d)</p>
-                    <p className="text-2xl font-semibold text-gray-900">
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Requests (30d)</p>
+                    <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                       {trends && trends.length > 0 
                         ? trends.reduce((sum, t) => sum + t.total_requests, 0)
                         : '0'}
@@ -550,18 +550,18 @@ export default function SLADashboard() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-orange-100 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-md flex items-center justify-center">
+                      <svg className="w-5 h-5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
                     </div>
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Trend Status</p>
-                    <p className="text-2xl font-semibold text-green-600">
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Trend Status</p>
+                    <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
                       {trends && trends.length >= 2 
                         ? trends[trends.length - 1].compliance_percentage > trends[trends.length - 2].compliance_percentage 
                           ? '↗ Improving' 
@@ -576,8 +576,8 @@ export default function SLADashboard() {
             {/* Detailed Trend Analysis */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Compliance Trend Chart */}
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Compliance Rate Trend</h3>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Compliance Rate Trend</h3>
                 <div className="h-64">
                   {trends && trends.length > 0 ? (
                     <div className="h-full flex items-end justify-between space-x-1">
@@ -621,7 +621,7 @@ export default function SLADashboard() {
               </div>
 
               {/* TAT Trend Chart */}
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Turnaround Time Trend</h3>
                 <div className="h-64">
                   {trends && trends.length > 0 ? (
@@ -655,7 +655,7 @@ export default function SLADashboard() {
 
             {/* Comparative Analysis */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Week-over-Week Comparison</h3>
                 {trends && trends.length >= 14 ? (
                   <div className="space-y-4">
@@ -691,7 +691,7 @@ export default function SLADashboard() {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Monthly Performance</h3>
                 {trends && trends.length >= 30 ? (
                   <div className="space-y-4">
@@ -727,7 +727,7 @@ export default function SLADashboard() {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Performance Insights</h3>
                 <div className="space-y-3">
                   <div className="flex items-center">
@@ -762,7 +762,7 @@ export default function SLADashboard() {
             </div>
 
             {/* Forecasting Section */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-100 dark:border-gray-700">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Forecast & Recommendations</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -823,7 +823,7 @@ export default function SLADashboard() {
         )}
 
         {activeTab === 'recruiters' && (
-          <div className="bg-white rounded-lg shadow">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-100 dark:border-gray-700">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-medium text-gray-900">Recruiter Performance</h3>
             </div>
@@ -839,7 +839,7 @@ export default function SLADashboard() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg TAT</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {recruiterMetrics.map((recruiter, index) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">

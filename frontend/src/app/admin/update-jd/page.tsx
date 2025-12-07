@@ -57,9 +57,22 @@ const UpdateJD: React.FC = () => {
   const fetchRequirements = async () => {
     try {
       const response = await fetchTrackerRequirements();
-      // The tracker endpoint returns data directly as an array, not wrapped in success/data structure
+      // The tracker endpoint returns data in format: { items: [...], pagination: {...} }
+      // Handle both new format (with items) and old format (direct array) for backward compatibility
+      let requirementsArray: Requirement[] = [];
+      if (Array.isArray(response)) {
+        // Old format: direct array
+        requirementsArray = response;
+      } else if (response && Array.isArray(response.items)) {
+        // New format: object with items property
+        requirementsArray = response.items;
+      } else if (response && Array.isArray(response.requirements)) {
+        // Alternative format: object with requirements property
+        requirementsArray = response.requirements;
+      }
+      
       // Filter out closed requirements and only show open/active ones
-      const activeRequirements = (response || []).filter(req => req.status !== 'Closed');
+      const activeRequirements = requirementsArray.filter(req => req.status !== 'Closed');
       setRequirements(activeRequirements);
     } catch (error) {
       console.error('Error fetching requirements:', error);
@@ -135,8 +148,8 @@ const UpdateJD: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 dark:border-blue-400"></div>
       </div>
     );
   }
@@ -146,18 +159,18 @@ const UpdateJD: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">Update Job Description</h1>
-              <p className="text-lg text-gray-600">Upload job descriptions for existing requirements</p>
+              <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Update Job Description</h1>
+              <p className="text-lg text-gray-600 dark:text-gray-300">Upload job descriptions for existing requirements</p>
             </div>
             <button
               onClick={() => router.push('/admin')}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors duration-200"
+              className="bg-gray-600 dark:bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors duration-200"
             >
               Back to Admin
             </button>
@@ -165,13 +178,13 @@ const UpdateJD: React.FC = () => {
         </div>
 
         {/* Upload Section */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6">Upload Job Description</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-8 border border-gray-100 dark:border-gray-700">
+          <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">Upload Job Description</h2>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Requirement Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Select Requirement
               </label>
               <select
@@ -180,7 +193,7 @@ const UpdateJD: React.FC = () => {
                   const req = requirements.find(r => r.request_id === e.target.value);
                   setSelectedRequirement(req || null);
                 }}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
                 <option value="">Choose a requirement...</option>
                 {requirements.map((req) => (
@@ -194,7 +207,7 @@ const UpdateJD: React.FC = () => {
 
             {/* File Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Select Job Description File
               </label>
               <input
@@ -202,9 +215,9 @@ const UpdateJD: React.FC = () => {
                 type="file"
                 accept=".pdf,.docx"
                 onChange={handleFileSelect}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-gray-600 dark:file:text-gray-200"
               />
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Supported formats: PDF, DOCX (Max size: 10MB)
               </p>
             </div>
@@ -215,7 +228,7 @@ const UpdateJD: React.FC = () => {
             <button
               onClick={handleUpload}
               disabled={!selectedRequirement || !selectedFile || uploading}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
+              className="bg-blue-600 dark:bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
             >
               {uploading ? 'Uploading...' : 'Upload Job Description'}
             </button>
@@ -225,8 +238,8 @@ const UpdateJD: React.FC = () => {
           {uploadMessage && (
             <div className={`mt-4 p-4 rounded-lg ${
               uploadMessage.type === 'success' 
-                ? 'bg-green-100 text-green-700 border border-green-200' 
-                : 'bg-red-100 text-red-700 border border-red-200'
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800' 
+                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
             }`}>
               {uploadMessage.text}
             </div>
@@ -234,9 +247,9 @@ const UpdateJD: React.FC = () => {
         </div>
 
         {/* Requirements List */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-gray-800">Requirements List</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Requirements List</h2>
             
             {/* Filters */}
             <div className="flex gap-4">
@@ -245,12 +258,12 @@ const UpdateJD: React.FC = () => {
                 placeholder="Search requirements..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
               />
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
                 <option value="all">All Requirements</option>
                 <option value="no-jd">Missing JD</option>
@@ -263,50 +276,50 @@ const UpdateJD: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Request ID</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Job Title</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Department</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Location</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">JD Status</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Created</th>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Request ID</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Job Title</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Department</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Location</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">JD Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Created</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRequirements.map((req) => (
                   <tr 
                     key={req.request_id} 
-                    className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
-                      selectedRequirement?.request_id === req.request_id ? 'bg-blue-50' : ''
+                    className={`border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${
+                      selectedRequirement?.request_id === req.request_id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                     }`}
                     onClick={() => setSelectedRequirement(req)}
                   >
-                    <td className="py-3 px-4 font-medium text-gray-900">{req.request_id}</td>
-                    <td className="py-3 px-4 text-gray-700">{req.job_title || 'N/A'}</td>
-                    <td className="py-3 px-4 text-gray-700">{req.department || 'N/A'}</td>
-                    <td className="py-3 px-4 text-gray-700">{req.location || 'N/A'}</td>
+                    <td className="py-3 px-4 font-medium text-gray-900 dark:text-gray-100">{req.request_id}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{req.job_title || 'N/A'}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{req.department || 'N/A'}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{req.location || 'N/A'}</td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        req.status === 'Open' ? 'bg-green-100 text-green-800' :
-                        req.status === 'Closed' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
+                        req.status === 'Open' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :
+                        req.status === 'Closed' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' :
+                        'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
                       }`}>
                         {getStatusDisplayName(req.status)}
                       </span>
                     </td>
                     <td className="py-3 px-4">
                       {req.jd_path ? (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
                           Has JD
                         </span>
                       ) : (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
                           Missing JD
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-gray-500 text-sm">
+                    <td className="py-3 px-4 text-gray-500 dark:text-gray-400 text-sm">
                       {new Date(req.created_at).toLocaleDateString()}
                     </td>
                   </tr>
@@ -315,7 +328,7 @@ const UpdateJD: React.FC = () => {
             </table>
             
             {filteredRequirements.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                 No requirements found matching your criteria.
               </div>
             )}
