@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { api } from '@/services/api'
 import { getStatusDisplayName } from '@/utils/statusFormatter'
 import JobDescriptionModal from '@/components/JobDescriptionModal'
+import Select from 'react-select'
+import { useTheme } from '@/context/ThemeContext'
 
 interface TrackerRequirement {
   id: number
@@ -89,6 +91,7 @@ const TrackerPage: React.FC = () => {
   // Pagination
   const PAGE_SIZE = 15
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
   // Enhanced filter state with localStorage persistence
   const [filters, setFilters] = useState(() => {
@@ -134,9 +137,16 @@ const TrackerPage: React.FC = () => {
     }
   })
   const [showFilters, setShowFilters] = useState(false)
+  const { theme } = useTheme()
 
-  // Company enum options loaded from backend (database)
+  // Filter options loaded from backend (database)
   const [companyOptions, setCompanyOptions] = useState<string[]>([])
+  const [statusOptions, setStatusOptions] = useState<string[]>([])
+  const [priorityOptions, setPriorityOptions] = useState<string[]>([])
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>([])
+  const [locationOptions, setLocationOptions] = useState<string[]>([])
+  const [jobTitleOptions, setJobTitleOptions] = useState<string[]>([])
+  const [recruiterOptions, setRecruiterOptions] = useState<string[]>([])
 
   useEffect(() => {
     // Check authentication first
@@ -154,17 +164,53 @@ const TrackerPage: React.FC = () => {
       }
       setCurrentUser(userData)
       setAuthChecked(true)
-      fetchTrackerData()
-      // Load company enum values from backend for dropdown
+      // Check if filters were previously applied (saved in localStorage)
+      const hasSavedFilters = typeof window !== 'undefined' && localStorage.getItem(FILTER_STORAGE_KEY) !== null
+      fetchTrackerData(1, appliedFilters, hasSavedFilters)
+      // Load all enum/filter values from backend
       ;(async () => {
         try {
-          const res = await api.get('/get-enum-values?enum_type=company')
-          if (res?.success && Array.isArray(res.values)) {
-            const sorted = [...res.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+          const [companyRes, priorityRes, deptRes, locationRes, jobTitleRes, statusRes, recruiterRes] = await Promise.all([
+            api.get('/enum/get-enum-values?enum_type=company'),
+            api.get('/enum/get-enum-values?enum_type=priority'),
+            api.get('/enum/get-enum-values?enum_type=department'),
+            api.get('/enum/filter-values/location'),
+            api.get('/enum/filter-values/job-title'),
+            api.get('/enum/filter-values/status'),
+            api.get('/enum/filter-values/recruiters')
+          ])
+          
+          if (companyRes?.success && Array.isArray(companyRes.values)) {
+            const sorted = [...companyRes.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
             setCompanyOptions(sorted)
           }
+          if (priorityRes?.success && Array.isArray(priorityRes.values)) {
+            const sorted = [...priorityRes.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+            setPriorityOptions(sorted)
+          }
+          if (deptRes?.success && Array.isArray(deptRes.values)) {
+            const sorted = [...deptRes.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+            setDepartmentOptions(sorted)
+          }
+          if (locationRes?.success && Array.isArray(locationRes.values)) {
+            const sorted = [...locationRes.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+            setLocationOptions(sorted)
+          }
+          if (jobTitleRes?.success && Array.isArray(jobTitleRes.values)) {
+            const sorted = [...jobTitleRes.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+            setJobTitleOptions(sorted)
+          }
+          if (statusRes?.success && Array.isArray(statusRes.values)) {
+            // Normalize status values: Candidate_Submission -> candidate submission
+            const normalized = statusRes.values.map((s: string) => s.toLowerCase().replace(/_/g, ' '))
+            setStatusOptions(normalized)
+          }
+          if (recruiterRes?.success && Array.isArray(recruiterRes.values)) {
+            const sorted = [...recruiterRes.values].sort((a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+            setRecruiterOptions(sorted)
+          }
         } catch (e) {
-          console.error('Failed to load company enum values', e)
+          console.error('Failed to load filter options', e)
         }
       })()
     } catch (error) {
@@ -176,14 +222,91 @@ const TrackerPage: React.FC = () => {
 
 
 
-  const fetchTrackerData = async () => {
+  // Helper function to check if any filters are active
+  const hasActiveFilters = (filters: typeof appliedFilters): boolean => {
+    return Object.values(filters).some(filter => filter !== 'all')
+  }
+
+  // Helper function to check if filters were explicitly applied (saved in localStorage)
+  const hasAppliedFilters = (): boolean => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(FILTER_STORAGE_KEY)
+      return saved !== null
+    }
+    return false
+  }
+
+  const fetchTrackerData = async (pageNum: number = currentPage, filters: typeof appliedFilters = appliedFilters, usePagination: boolean = false) => {
     try {
       setLoadingTable(true)
-      const [requirementsData, statsData] = await Promise.all([
-        api.get('/tracker'),
+      
+      // Check if any filters are active
+      const filtersActive = hasActiveFilters(filters)
+      
+      // Build query parameters
+      const params = new URLSearchParams()
+      
+      // Use pagination if:
+      // 1. Filters are active (any filter is not 'all'), OR
+      // 2. Filters were explicitly applied (usePagination flag is true)
+      // Otherwise, just fetch recent 15 (initial load with no filters)
+      if (filtersActive || usePagination) {
+        params.append('page', pageNum.toString())
+        params.append('pageSize', PAGE_SIZE.toString())
+      } else {
+        // No filters: just fetch recent 15 (page=1, pageSize=15)
+        params.append('page', '1')
+        params.append('pageSize', PAGE_SIZE.toString())
+      }
+      
+      // Add filters (only if not 'all')
+      if (filters.status && filters.status !== 'all') {
+        params.append('status', filters.status)
+      }
+      if (filters.company && filters.company !== 'all') {
+        params.append('company', filters.company)
+      }
+      if (filters.jobTitle && filters.jobTitle !== 'all') {
+        params.append('jobTitle', filters.jobTitle)
+      }
+      if (filters.assignedTo && filters.assignedTo !== 'all') {
+        params.append('assignedTo', filters.assignedTo)
+      }
+      if (filters.priority && filters.priority !== 'all') {
+        params.append('priority', filters.priority)
+      }
+      if (filters.department && filters.department !== 'all') {
+        params.append('department', filters.department)
+      }
+      if (filters.location && filters.location !== 'all') {
+        params.append('location', filters.location)
+      }
+      
+      const [requirementsResponse, statsData] = await Promise.all([
+        api.get(`/tracker?${params.toString()}`),
         api.get('/tracker/stats')
       ])
-      setRequirements(requirementsData)
+      
+      // Handle new paginated response format
+      if (requirementsResponse && requirementsResponse.items) {
+        setRequirements(requirementsResponse.items)
+        // Update pagination info if provided
+        if (requirementsResponse.pagination) {
+          setTotalCount(requirementsResponse.pagination.total || 0)
+        } else if (filtersActive || usePagination) {
+          // If we're using pagination but backend doesn't return pagination info, use items length
+          setTotalCount(requirementsResponse.items?.length || 0)
+        }
+      } else {
+        // Fallback for old format (backward compatibility)
+        setRequirements(requirementsResponse || [])
+        if (filtersActive || usePagination) {
+          setTotalCount(requirementsResponse?.length || 0)
+        } else {
+          setTotalCount(requirementsResponse?.length || 0)
+        }
+      }
+      
       setStats(statsData)
       // Don't fetch closed requirements initially - lazy load when clicked
     } catch (err) {
@@ -211,9 +334,10 @@ const TrackerPage: React.FC = () => {
       setShowSuccessMessage(true)
       // Hide success message after 3 seconds
       setTimeout(() => setShowSuccessMessage(false), 3000)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating requirement:', err)
-      alert('Failed to update requirement')
+      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to update requirement'
+      alert(errorMessage)
     }
   }
 
@@ -290,6 +414,49 @@ const TrackerPage: React.FC = () => {
     return status.toLowerCase().replace(/_/g, ' ').trim()
   }
 
+  // React-select dark mode styles
+  const isDark = theme === 'dark'
+  const selectStyles = {
+    control: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: isDark ? '#1f2937' : 'white',
+      borderColor: state.isFocused ? '#3b82f6' : (isDark ? '#4b5563' : '#d1d5db'),
+      boxShadow: state.isFocused ? '0 0 0 2px rgba(59, 130, 246, 0.5)' : 'none',
+      '&:hover': {
+        borderColor: '#3b82f6'
+      }
+    }),
+    menu: (base: any) => ({
+      ...base,
+      backgroundColor: isDark ? '#1f2937' : 'white',
+      zIndex: 9999
+    }),
+    option: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: state.isSelected 
+        ? '#3b82f6' 
+        : state.isFocused 
+          ? (isDark ? '#374151' : '#eff6ff')
+          : (isDark ? '#1f2937' : 'white'),
+      color: state.isSelected ? 'white' : (isDark ? '#f3f4f6' : '#111827'),
+      '&:hover': {
+        backgroundColor: state.isSelected ? '#3b82f6' : (isDark ? '#374151' : '#eff6ff')
+      }
+    }),
+    input: (base: any) => ({
+      ...base,
+      color: isDark ? '#f3f4f6' : '#111827'
+    }),
+    singleValue: (base: any) => ({
+      ...base,
+      color: isDark ? '#f3f4f6' : '#111827'
+    }),
+    placeholder: (base: any) => ({
+      ...base,
+      color: isDark ? '#9ca3af' : '#6b7280'
+    })
+  }
+
   const getStatusColor = (status: string) => {
     switch (normalizeStatus(status)) {
       case 'open': return 'bg-green-100 text-green-800'
@@ -303,19 +470,17 @@ const TrackerPage: React.FC = () => {
     }
   }
 
-  // Get unique values for filter dropdowns
-  const uniqueCompanies = Array.from(new Set(requirements.map(req => req.company_name || req.sender_name).filter(Boolean)))
-  const uniqueAssignedTo = Array.from(new Set(requirements.flatMap(req => req.assigned_recruiters || []).filter(Boolean)))
-  const uniqueJobTitles = Array.from(new Set(requirements.map(req => req.job_title).filter(Boolean)))
-  const uniquePriorities = Array.from(new Set(requirements.map(req => req.priority).filter(Boolean)))
-  const uniqueDepartments = Array.from(new Set(requirements.map(req => req.department).filter(Boolean)))
-  const uniqueLocations = Array.from(new Set(requirements.map(req => req.location).filter(Boolean)))
+  // Filter options are now loaded from backend endpoints (no need for unique* calculations)
 
   // Apply filters function
   const applyFilters = () => {
-    setAppliedFilters({ ...filters })
-    localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters))
+    const newAppliedFilters = { ...filters }
+    setAppliedFilters(newAppliedFilters)
+    localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(newAppliedFilters))
     setShowFilters(false)
+    setCurrentPage(1) // Reset to first page when filters are applied
+    // Fetch data with new filters - always use pagination when filters are explicitly applied
+    fetchTrackerData(1, newAppliedFilters, true)
   }
 
   // Clear filters function
@@ -331,7 +496,11 @@ const TrackerPage: React.FC = () => {
     }
     setFilters(resetFilters)
     setAppliedFilters(resetFilters)
+    setFilterStatus('all')
+    setCurrentPage(1)
     localStorage.removeItem(FILTER_STORAGE_KEY)
+    // Don't use pagination when clearing filters - go back to initial state (recent 15)
+    fetchTrackerData(1, resetFilters, false)
   }
 
   // Filter change handler
@@ -342,81 +511,49 @@ const TrackerPage: React.FC = () => {
     }))
   }
 
-  // Enhanced filter requirements based on applied filters
-  const filteredRequirements = showArchived 
+  // For archived/closed views, use client-side filtering
+  // For main view, requirements are already filtered server-side
+  const displayRequirements = showArchived 
     ? archivedRequirements
     : filterStatus === 'closed' 
     ? closedRequirements 
-    : requirements.filter(req => {
-        // Status filter (keep legacy filterStatus for backward compatibility)
-        const reqStatusNorm = normalizeStatus(req.status)
-        if (filterStatus !== 'all' && (!req.status || reqStatusNorm !== filterStatus.toLowerCase())) {
-          return false;
-        }
-        
-        // Apply enhanced filters only if they're different from 'all'
-        if (appliedFilters.status !== 'all' && (!req.status || reqStatusNorm !== appliedFilters.status.toLowerCase())) {
-          return false;
-        }
-        
-        // Company filter
-        if (appliedFilters.company !== 'all') {
-          const companyName = req.company_name || req.sender_name;
-          if (!companyName || companyName !== appliedFilters.company) {
-            return false;
-          }
-        }
-        
-        // Assigned To filter
-        if (appliedFilters.assignedTo !== 'all') {
-          const assignedRecruiters = req.assigned_recruiters || [];
-          if (!assignedRecruiters.includes(appliedFilters.assignedTo)) {
-            return false;
-          }
-        }
+    : requirements // Already filtered server-side
 
-        // Job Title filter
-        if (appliedFilters.jobTitle !== 'all') {
-          if (!req.job_title || req.job_title !== appliedFilters.jobTitle) {
-            return false;
-          }
-        }
+  // Check if filters are active (for hybrid pagination approach)
+  // Consider filters active if:
+  // 1. Any filter is not 'all', OR
+  // 2. Filters were explicitly applied (saved in localStorage)
+  const filtersActive = hasActiveFilters(appliedFilters) || hasAppliedFilters()
 
-        // Priority filter
-        if (appliedFilters.priority !== 'all') {
-          if (!req.priority || req.priority !== appliedFilters.priority) {
-            return false;
-          }
-        }
-
-        // Department filter
-        if (appliedFilters.department !== 'all') {
-          if (!req.department || req.department !== appliedFilters.department) {
-            return false;
-          }
-        }
-
-        // Location filter
-        if (appliedFilters.location !== 'all') {
-          if (!req.location || req.location !== appliedFilters.location) {
-            return false;
-          }
-        }
-        
-        return true;
-      });
-
-  // Reset to first page when filters or mode change
+  // Pagination is now handled server-side
+  // Fetch on page change (only for main view with filters, not archived/closed)
+  // Only trigger when filters are active (hybrid approach)
   useEffect(() => {
-    setCurrentPage(1)
-  }, [showArchived, filterStatus, JSON.stringify(appliedFilters)])
+    // Only fetch on page change if filters are active and we're not on initial load
+    if (!showArchived && filterStatus !== 'closed' && filtersActive) {
+      fetchTrackerData(currentPage, appliedFilters, true)
+    }
+  }, [currentPage])
 
-  // Pagination calculations based on filtered list
-  const totalItems = filteredRequirements.length
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
+  // For display purposes (pagination info)
+  // For server-side paginated results with filters, use totalCount from API
+  // For archived/closed, use local array length
+  // For default view (no filters), don't show pagination
+  const totalItems = showArchived || filterStatus === 'closed' 
+    ? displayRequirements.length 
+    : filtersActive
+      ? totalCount
+      : displayRequirements.length // When no filters, just show count of displayed items
+  const totalPages = filtersActive && !showArchived && filterStatus !== 'closed'
+    ? Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+    : Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
   const startIndex = (currentPage - 1) * PAGE_SIZE
-  const endIndex = Math.min(startIndex + PAGE_SIZE, totalItems)
-  const paginatedRequirements = filteredRequirements.slice(startIndex, endIndex)
+  const endIndex = showArchived || filterStatus === 'closed'
+    ? Math.min(startIndex + PAGE_SIZE, totalItems)
+    : filtersActive
+      ? startIndex + displayRequirements.length
+      : displayRequirements.length
+  const paginatedRequirements = displayRequirements
 
   // Don't render anything until authentication is checked
   if (!authChecked) {
@@ -583,7 +720,13 @@ const TrackerPage: React.FC = () => {
             All ({requirements.length})
           </button>
           <button
-            onClick={() => setFilterStatus('open')}
+            onClick={() => {
+              setFilterStatus('open')
+              const newFilters = { ...appliedFilters, status: 'open' }
+              setAppliedFilters(newFilters)
+              setCurrentPage(1)
+              fetchTrackerData(1, newFilters)
+            }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'open' 
                 ? 'bg-green-600 text-white' 
@@ -593,7 +736,13 @@ const TrackerPage: React.FC = () => {
             Open ({stats?.open || 0})
           </button>
           <button
-            onClick={() => setFilterStatus('candidate submission')}
+            onClick={() => {
+              setFilterStatus('candidate submission')
+              const newFilters = { ...appliedFilters, status: 'candidate submission' }
+              setAppliedFilters(newFilters)
+              setCurrentPage(1)
+              fetchTrackerData(1, newFilters)
+            }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'candidate submission' 
                 ? 'bg-purple-600 text-white' 
@@ -603,7 +752,13 @@ const TrackerPage: React.FC = () => {
             Candidate Submission ({stats?.candidate_submission || 0})
           </button>
           <button
-            onClick={() => setFilterStatus('interview scheduled')}
+            onClick={() => {
+              setFilterStatus('interview scheduled')
+              const newFilters = { ...appliedFilters, status: 'interview scheduled' }
+              setAppliedFilters(newFilters)
+              setCurrentPage(1)
+              fetchTrackerData(1, newFilters)
+            }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'interview scheduled' 
                 ? 'bg-orange-600 text-white' 
@@ -613,7 +768,13 @@ const TrackerPage: React.FC = () => {
             Interview Scheduled ({stats?.interview_scheduled || 0})
           </button>
           <button
-            onClick={() => setFilterStatus('offer recommendation')}
+            onClick={() => {
+              setFilterStatus('offer recommendation')
+              const newFilters = { ...appliedFilters, status: 'offer recommendation' }
+              setAppliedFilters(newFilters)
+              setCurrentPage(1)
+              fetchTrackerData(1, newFilters)
+            }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'offer recommendation' 
                 ? 'bg-indigo-600 text-white' 
@@ -623,7 +784,13 @@ const TrackerPage: React.FC = () => {
             Offer Recommendation ({stats?.offer_recommendation || 0})
           </button>
           <button
-            onClick={() => setFilterStatus('on boarding')}
+            onClick={() => {
+              setFilterStatus('on boarding')
+              const newFilters = { ...appliedFilters, status: 'on boarding' }
+              setAppliedFilters(newFilters)
+              setCurrentPage(1)
+              fetchTrackerData(1, newFilters)
+            }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'on boarding' 
                 ? 'bg-pink-600 text-white' 
@@ -635,16 +802,18 @@ const TrackerPage: React.FC = () => {
           <button
             onClick={() => {
               setFilterStatus('on hold')
-              fetchOnHoldRequirements()
+              const newFilters = { ...appliedFilters, status: 'on hold' }
+              setAppliedFilters(newFilters)
+              setCurrentPage(1)
+              fetchTrackerData(1, newFilters)
             }}
-            disabled={loadingOnHold}
             className={`px-3 py-1.5 rounded-md text-sm font-medium ${
               filterStatus === 'on hold' 
                 ? 'bg-red-600 text-white' 
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-            } ${loadingOnHold ? 'opacity-50 cursor-wait' : ''}`}
+            }`}
           >
-            {loadingOnHold ? 'Loading...' : `On Hold (${stats?.on_hold || 0})`}
+            On Hold ({stats?.on_hold || 0})
           </button>
           <button
             onClick={() => {
@@ -721,122 +890,148 @@ const TrackerPage: React.FC = () => {
               {/* Status Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => handleFilterChange('status', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="open">Open</option>
-                  <option value="candidate submission">Candidate Submission</option>
-                  <option value="interview scheduled">Interview Scheduled</option>
-                  <option value="offer recommendation">Offer Recommendation</option>
-                  <option value="on boarding">On boarding</option>
-                  <option value="on hold">On Hold</option>
-                  <option value="closed">Closed</option>
-                </select>
+                <Select
+                  value={filters.status === 'all' 
+                    ? { value: 'all', label: 'All Statuses' }
+                    : filters.status 
+                      ? { value: filters.status, label: filters.status.charAt(0).toUpperCase() + filters.status.slice(1) }
+                      : null}
+                  onChange={(selected) => handleFilterChange('status', selected?.value || 'all')}
+                  options={[
+                    { value: 'all', label: 'All Statuses' },
+                    ...statusOptions.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))
+                  ]}
+                  isSearchable={true}
+                  placeholder="Select status..."
+                  className="text-sm"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Company Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-                <select
-                  value={filters.company}
-                  onChange={(e) => handleFilterChange('company', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Companies</option>
-                  {uniqueCompanies.map((company) => (
-                    <option key={company} value={company}>
-                      {company}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={filters.company === 'all'
+                    ? { value: 'all', label: 'All Companies' }
+                    : filters.company
+                      ? { value: filters.company, label: filters.company }
+                      : null}
+                  onChange={(selected) => handleFilterChange('company', selected?.value || 'all')}
+                  options={[
+                    { value: 'all', label: 'All Companies' },
+                    ...companyOptions.map(c => ({ value: c, label: c }))
+                  ]}
+                  isSearchable={true}
+                  placeholder="Select company..."
+                  className="text-sm"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Job Title Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
-                <select
-                  value={filters.jobTitle}
-                  onChange={(e) => handleFilterChange('jobTitle', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Job Titles</option>
-                  {uniqueJobTitles.map((title) => (
-                    <option key={title} value={title}>
-                      {title}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={filters.jobTitle === 'all'
+                    ? { value: 'all', label: 'All Job Titles' }
+                    : filters.jobTitle
+                      ? { value: filters.jobTitle, label: filters.jobTitle }
+                      : null}
+                  onChange={(selected) => handleFilterChange('jobTitle', selected?.value || 'all')}
+                  options={[
+                    { value: 'all', label: 'All Job Titles' },
+                    ...jobTitleOptions.map(t => ({ value: t, label: t }))
+                  ]}
+                  isSearchable={true}
+                  placeholder="Select job title..."
+                  className="text-sm"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Assigned To Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
-                <select
-                  value={filters.assignedTo}
-                  onChange={(e) => handleFilterChange('assignedTo', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Recruiters</option>
-                  {uniqueAssignedTo.map((recruiter) => (
-                    <option key={recruiter} value={recruiter}>
-                      {recruiter}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={filters.assignedTo === 'all'
+                    ? { value: 'all', label: 'All Recruiters' }
+                    : filters.assignedTo
+                      ? { value: filters.assignedTo, label: filters.assignedTo }
+                      : null}
+                  onChange={(selected) => handleFilterChange('assignedTo', selected?.value || 'all')}
+                  options={[
+                    { value: 'all', label: 'All Recruiters' },
+                    ...recruiterOptions.map(r => ({ value: r, label: r }))
+                  ]}
+                  isSearchable={true}
+                  placeholder="Select recruiter..."
+                  className="text-sm"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Priority Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                <select
-                  value={filters.priority}
-                  onChange={(e) => handleFilterChange('priority', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Priorities</option>
-                  {uniquePriorities.map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={filters.priority === 'all'
+                    ? { value: 'all', label: 'All Priorities' }
+                    : filters.priority
+                      ? { value: filters.priority, label: filters.priority }
+                      : null}
+                  onChange={(selected) => handleFilterChange('priority', selected?.value || 'all')}
+                  options={[
+                    { value: 'all', label: 'All Priorities' },
+                    ...priorityOptions.map(p => ({ value: p, label: p }))
+                  ]}
+                  isSearchable={true}
+                  placeholder="Select priority..."
+                  className="text-sm"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Department Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                <select
-                  value={filters.department}
-                  onChange={(e) => handleFilterChange('department', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Departments</option>
-                  {uniqueDepartments.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={filters.department === 'all'
+                    ? { value: 'all', label: 'All Departments' }
+                    : filters.department
+                      ? { value: filters.department, label: filters.department }
+                      : null}
+                  onChange={(selected) => handleFilterChange('department', selected?.value || 'all')}
+                  options={[
+                    { value: 'all', label: 'All Departments' },
+                    ...departmentOptions.map(d => ({ value: d, label: d }))
+                  ]}
+                  isSearchable={true}
+                  placeholder="Select department..."
+                  className="text-sm"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Location Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                <select
-                  value={filters.location}
-                  onChange={(e) => handleFilterChange('location', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Locations</option>
-                  {uniqueLocations.map((location) => (
-                    <option key={location} value={location}>
-                      {location}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={filters.location === 'all'
+                    ? { value: 'all', label: 'All Locations' }
+                    : filters.location
+                      ? { value: filters.location, label: filters.location }
+                      : null}
+                  onChange={(selected) => handleFilterChange('location', selected?.value || 'all')}
+                  options={[
+                    { value: 'all', label: 'All Locations' },
+                    ...locationOptions.map(l => ({ value: l, label: l }))
+                  ]}
+                  isSearchable={true}
+                  placeholder="Select location..."
+                  className="text-sm"
+                  styles={selectStyles}
+                />
               </div>
 
             </div>
@@ -861,9 +1056,16 @@ const TrackerPage: React.FC = () => {
 
         {/* Results Summary */}
         <div className="mb-4 text-sm text-gray-600">
-          Showing {totalItems === 0 ? 0 : startIndex + 1}-{endIndex} of {totalItems} requirements
-          {Object.values(appliedFilters).filter(filter => filter !== 'all').length > 0 && (
-            <span className="text-blue-600"> (filtered)</span>
+          {filtersActive ? (
+            <span>
+              Showing {totalItems === 0 ? 0 : startIndex + 1}-{endIndex} of {totalItems} requirements
+              <span className="text-blue-600"> (filtered)</span>
+            </span>
+          ) : (
+            <span>
+              Showing {displayRequirements.length} most recent requirements
+              {displayRequirements.length === PAGE_SIZE && <span className="text-gray-500"> (apply filters to see all)</span>}
+            </span>
           )}
         </div>
       </div>
@@ -884,7 +1086,7 @@ const TrackerPage: React.FC = () => {
               <p className="text-sm font-medium text-red-800">{error}</p>
             </div>
             <button 
-              onClick={fetchTrackerData}
+              onClick={() => fetchTrackerData(currentPage, appliedFilters)}
               className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
             >
               Retry
@@ -1002,7 +1204,7 @@ const TrackerPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 dark:text-gray-100">
-                          {req.deleted_by || 'N/A'}
+                          {req.deleted_by_name || req.deleted_by || 'N/A'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -1192,8 +1394,8 @@ const TrackerPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Pagination Controls - Numbered with ellipses */}
-      {totalItems > 0 && (
+      {/* Pagination Controls - Only show when filters are active */}
+      {totalItems > 0 && filtersActive && !showArchived && filterStatus !== 'closed' && (
         <div className="flex items-center justify-center px-4 py-3 bg-white border border-t-0 rounded-b-lg shadow">
           <div className="flex items-center gap-1">
             {/* Prev */}
@@ -1250,7 +1452,7 @@ const TrackerPage: React.FC = () => {
         </div>
       )}
 
-      {!loadingTable && filteredRequirements.length === 0 && (
+      {!loadingTable && paginatedRequirements.length === 0 && (
         <div className="text-center py-8">
           <p className="text-gray-500">No requirements found for the selected filter.</p>
         </div>

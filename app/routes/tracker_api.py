@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 from app.services.email_processor import EmailProcessor
 from app.middleware.domain_auth import require_domain_auth
 from app.middleware.redis_performance_middleware import cache_response, invalidate_cache_pattern
+from flask_jwt_extended import decode_token
 
 def get_db_session():
     """
@@ -72,7 +73,7 @@ def _get_assigned_user_display(user_id):
     if not user:
         return None
     # Only show recruiters, not admins
-    if user.role.value == 'recruiter':
+    if user.role == 'recruiter':
         return user.username
     else:
         return None  # This will be treated as unassigned
@@ -90,7 +91,7 @@ def _get_assigned_recruiters_display(requirement_id, session=None):
         recruiters = []
         
         for assignment in assignments:
-            if assignment.user and assignment.user.role.value == 'recruiter':
+            if assignment.user and assignment.user.role == 'recruiter':
                 recruiters.append(assignment.user.username)
         
         return recruiters
@@ -108,10 +109,9 @@ def get_breach_time_display(requirement_id):
     """Get breach time display for a requirement"""
     try:
         # Get the most recent breaching SLA tracker entry for this requirement
-        from app.models.sla_tracker import SLAStatusEnum
         breaching_tracker = get_db_session().query(SLATracker).filter_by(
             requirement_id=requirement_id,
-            sla_status=SLAStatusEnum.breached
+            sla_status='breached'
         ).order_by(SLATracker.sla_breach_hours.desc()).first()
         
         if not breaching_tracker or not breaching_tracker.sla_breach_hours:
@@ -311,312 +311,199 @@ def _categorize_content(email_subject, email_body):
 @require_domain_auth
 @cache_response(ttl=300)  # Cache for 5 minutes
 def get_tracker_requirements():
-    """Get all RFH requirements with request IDs for the tracker, grouped by thread_id or normalized subject for status."""
+    """Get RFH requirements for the tracker with server-side filtering and pagination - manual requirements only."""
     try:
-        # Initialize email categorizer
-        email_processor = EmailProcessor()
+        # Import SQLAlchemy operators at the top (needed for multiple filter blocks)
+        from sqlalchemy import or_, and_
+        from app.models.assignment import Assignment
         
-        # Get authenticated user placed by domain auth middleware
+        # Get pagination parameters
+        page = request.args.get('page', default=1, type=int)
+        page_size = request.args.get('pageSize', default=15, type=int)
+        
+        # Get filter parameters
+        filter_status = request.args.get('status', type=str)
+        filter_company = request.args.get('company', type=str)
+        filter_job_title = request.args.get('jobTitle', type=str)
+        filter_assigned_to = request.args.get('assignedTo', type=str)
+        filter_priority = request.args.get('priority', type=str)
+        filter_department = request.args.get('department', type=str)
+        filter_location = request.args.get('location', type=str)
+        
+        # Get authenticated user
         current_user = getattr(request, 'current_user', None)
         
-        # Get manual requirements (these should always be included regardless of email subject)
-        # Exclude project requirements from main tracker and soft-deleted requirements
-        manual_query = get_db_session().query(Requirement)\
-            .options(
-                joinedload(Requirement.email_details),
-                joinedload(Requirement.assignments)
-            )\
+        # Base query - fetch manual requirements only
+        query = get_db_session().query(Requirement)\
             .filter(Requirement.deleted_at.is_(None))\
-            .filter(
-                Requirement.requirement_id.isnot(None),
-                Requirement.is_manual_requirement == True
-            )
+            .filter(Requirement.requirement_id.isnot(None))\
+            .filter(Requirement.is_manual_requirement == True)
         
-        # Get automatic requirements (email-based) with existing filters, excluding soft-deleted
-        from app.models.email_details import EmailDetails
-        automatic_query = get_db_session().query(Requirement)\
-            .options(
-                joinedload(Requirement.email_details),
-                joinedload(Requirement.assignments)
-            )\
-            .filter(Requirement.deleted_at.is_(None))\
-            .join(EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id)\
-            .filter(
-                Requirement.requirement_id.isnot(None),
-                Requirement.is_manual_requirement == False,
-                ~EmailDetails.email_subject.like('Re:%'),
-                ~EmailDetails.email_subject.like('Fw:%'),
-                ~EmailDetails.email_subject.like('Fwd:%'),
-                ~EmailDetails.email_subject.like('Forward:%')
-            )
-        
-        # Apply role-based filtering to both manual and automatic requirements
-        if current_user and getattr(current_user.role, 'value', None) == 'recruiter':
-            # For recruiters, only show requirements assigned to them (Assignment.is_active) or legacy owner
-            from sqlalchemy import or_, and_
-            from app.models.assignment import Assignment
-            from app.models.requirement import RequirementStatusEnum
-            manual_query = manual_query.filter(
+        # Apply role-based filtering
+        if current_user and current_user.role == 'recruiter':
+            query = query.filter(
                 or_(
                     Requirement.user_id == current_user.user_id,
                     Requirement.assignments.any(and_(Assignment.user_id == current_user.user_id, Assignment.is_active == True))
                 ),
-                Requirement.status != RequirementStatusEnum.On_Hold
+                Requirement.status != 'On_Hold'
             )
-            automatic_query = automatic_query.filter(
-                or_(
-                    Requirement.user_id == current_user.user_id,
-                    Requirement.assignments.any(and_(Assignment.user_id == current_user.user_id, Assignment.is_active == True))
-                ),
-                Requirement.status != RequirementStatusEnum.On_Hold
-            )
-            current_app.logger.info(f"Filtering requirements for recruiter via assignments: {current_user.username}")
-        elif current_user and getattr(current_user.role, 'value', None) == 'admin':
-            # For admins, show all requirements including on-hold ones
+            current_app.logger.info(f"Filtering requirements for recruiter: {current_user.username}")
+        elif current_user and current_user.role == 'admin':
             current_app.logger.info(f"Showing all requirements for admin: {current_user.username}")
-        else:
-            # For unauthenticated users or unknown roles, show all (or you can restrict this)
-            current_app.logger.info("No user authentication found, showing all requirements")
         
-        # Get both manual and automatic requirements
-        manual_requirements = manual_query.order_by(Requirement.created_at.desc()).all()
-        automatic_requirements = automatic_query.order_by(EmailDetails.received_datetime.desc()).all()
+        # Apply filters (only if not 'all')
+        if filter_status and filter_status != 'all':
+            # Normalize status: convert "candidate submission" to "Candidate_Submission"
+            status_map = {
+                'open': 'Open',
+                'candidate submission': 'Candidate_Submission',
+                'interview scheduled': 'Interview_Scheduled',
+                'offer recommendation': 'Offer_Recommendation',
+                'on boarding': 'On_Boarding',
+                'on hold': 'On_Hold',
+                'closed': 'Closed'
+            }
+            db_status = status_map.get(filter_status.lower(), filter_status)
+            query = query.filter(Requirement.status == db_status)
         
-        # Combine both sets
-        requirements = manual_requirements + automatic_requirements
+        if filter_company and filter_company != 'all':
+            query = query.filter(Requirement.company_name == filter_company)
         
-        current_app.logger.info(f"Found {len(manual_requirements)} manual requirements and {len(automatic_requirements)} automatic requirements")
-
-        # Group by thread_id if present, else by normalized subject
-        thread_groups = {}
-        for req in requirements:
-            # For manual requirements, use request_id as the group key
-            if req.is_manual_requirement:
-                group_key = f"manual_{req.requirement_id}"
-            else:
-                # Use thread_id if available, otherwise use normalized subject
-                email_subject = ''
-                if req.email_details:
-                    email_subject = req.email_details[0].email_subject or ''
-                group_key = req.email_details[0].thread_id if req.email_details and req.email_details[0].thread_id else normalize_subject(email_subject)
+        if filter_job_title and filter_job_title != 'all':
+            query = query.filter(Requirement.job_title == filter_job_title)
+        
+        if filter_priority and filter_priority != 'all':
+            query = query.filter(Requirement.priority == filter_priority)
+        
+        if filter_department and filter_department != 'all':
+            query = query.filter(Requirement.department == filter_department)
+        
+        if filter_location and filter_location != 'all':
+            query = query.filter(Requirement.location == filter_location)
+        
+        # For assigned_to filter, we need to check both user_id and assignments
+        if filter_assigned_to and filter_assigned_to != 'all':
+            # Get user_id for the recruiter username
+            recruiter_user = get_db_session().query(User).filter(
+                User.username == filter_assigned_to,
+                User.role == 'recruiter'
+            ).first()
             
-            if group_key not in thread_groups:
-                thread_groups[group_key] = []
-            thread_groups[group_key].append(req)
-
-        current_app.logger.info(f"Grouped into {len(thread_groups)} thread groups")
-
+            if recruiter_user:
+                query = query.filter(
+                    or_(
+                        Requirement.user_id == recruiter_user.user_id,
+                        Requirement.assignments.any(
+                            and_(
+                                Assignment.user_id == recruiter_user.user_id,
+                                Assignment.is_active == True
+                            )
+                        )
+                    )
+                )
+        
+        # Get total count BEFORE pagination (for pagination info)
+        total_count = query.count()
+        
+        # Apply pagination
+        offset = (page - 1) * page_size
+        requirements = query.order_by(Requirement.created_at.desc()).offset(offset).limit(page_size).all()
+        
+        current_app.logger.info(f"Fetched {len(requirements)} requirements (page={page}, pageSize={page_size}, total={total_count})")
+        
+        # Batch fetch assigned recruiters in a single query (no N+1)
+        requirement_ids = [req.requirement_id for req in requirements]
+        assigned_recruiters_map = {}
+        user_display_map = {}
+        
+        if requirement_ids:
+            from app.models.assignment import Assignment
+            assignments = get_db_session().query(
+                Assignment.requirement_id,
+                User.username
+            ).join(User, Assignment.user_id == User.user_id).filter(
+                Assignment.requirement_id.in_(requirement_ids),
+                Assignment.is_active == True,
+                User.role == 'recruiter'
+            ).all()
+            
+            for row in assignments:
+                key = str(row.requirement_id)
+                if key not in assigned_recruiters_map:
+                    assigned_recruiters_map[key] = []
+                assigned_recruiters_map[key].append(row.username)
+            
+            # OPTIMIZATION: Batch fetch user display names (avoid N+1 queries)
+            user_ids = [req.user_id for req in requirements if req.user_id]
+            if user_ids:
+                users_query = get_db_session().query(
+                    User.user_id,
+                    User.username,
+                    User.role
+                ).filter(User.user_id.in_(user_ids)).all()
+                
+                for row in users_query:
+                    # Only show recruiters, not admins (matching _get_assigned_user_display behavior)
+                    if row.role == 'recruiter':
+                        user_display_map[str(row.user_id)] = row.username
+        
+        # Build result directly
         result = []
-        for group_key, group in thread_groups.items():
-            # For each thread, use the most recent requirement as the primary one
-            if len(group) > 1:
-                # Sort by received_datetime for automatic requirements, created_at for manual requirements
-                def sort_key(req):
-                    if req.is_manual_requirement:
-                        return req.created_at or datetime.min
-                    else:
-                        # Get received_datetime from email_details
-                        if req.email_details and req.email_details[0].received_datetime:
-                            return req.email_details[0].received_datetime
-                        return datetime.min
-                
-                group.sort(key=sort_key, reverse=True)
-                primary_req = group[0]
-                current_app.logger.info(f"Using primary requirement {primary_req.requirement_id} for thread {group_key}")
-                
-                # Check if status should be updated based on email category (only for automatic requirements)
-                category = None
-                if not primary_req.is_manual_requirement:
-                    category = get_category_for_requirement(primary_req)
-                    current_app.logger.info(f"Processing automatic requirement {primary_req.requirement_id}: current status='{primary_req.status}', detected category='{category}'")
-                    
-                    # Only update status if it's still in initial states and we have a category
-                    if category and primary_req.status in ['Open']:
-                        # Map email categories to status values
-                        category_to_status = {
-                            'candidate_submission': 'Candidate_Submission',
-                            'interview_scheduled': 'Interview_Scheduled',
-                            'offer_recommendation': 'Offer_Recommendation',
-                            'on_boarding': 'On_Boarding',
-                            'on_hold': 'On_Hold'
-                        }
-                        if category in category_to_status:
-                            old_status = primary_req.status
-                            primary_req.status = category_to_status[category]
-                            current_app.logger.info(f"Updated requirement {primary_req.requirement_id} status from '{old_status}' to '{primary_req.status}' based on category '{category}'")
-                    else:
-                        current_app.logger.info(f"Keeping requirement {primary_req.requirement_id} status as '{primary_req.status}' (already processed)")
-                else:
-                    current_app.logger.info(f"Processing manual requirement {primary_req.requirement_id}: keeping status as '{primary_req.status}' (no automatic updates)")
-                
-                current_app.logger.info(f"Email ID {primary_req.requirement_id} set to '{primary_req.status}' (group size > 1, category: {category})")
-                
-                # Check if this is a new assignment (updated within 24 hours and current user is assigned)
-                is_new_assignment = False
-                if current_user and current_user.role.value == 'recruiter' and primary_req.updated_at:
-                    time_diff = datetime.utcnow() - primary_req.updated_at
-                    is_within_24_hours = time_diff.total_seconds() < 24 * 60 * 60  # 24 hours in seconds
-                    # Check if current user is assigned to this requirement
-                    is_assigned_to_user = (primary_req.user_id == current_user.user_id) if current_user else False
-                    is_new_assignment = is_within_24_hours and is_assigned_to_user
-                
-                # Get email details for the primary requirement
-                email_subject = ''
-                sender_email = ''
-                sender_name = ''
-                received_datetime = None
-                if primary_req.email_details:
-                    email_subject = primary_req.email_details[0].email_subject or ''
-                    sender_email = primary_req.email_details[0].sender_email or ''
-                    sender_name = primary_req.email_details[0].sender_name or ''
-                    received_datetime = primary_req.email_details[0].received_datetime
-                elif primary_req.is_manual_requirement:
-                    # For manual requirements, use created_at as received_datetime
-                    received_datetime = primary_req.created_at
-                
-                result.append({
-                    'id': primary_req.requirement_id,
-                    'request_id': primary_req.request_id,
-                    'job_title': primary_req.job_title,
-                    'email_subject': email_subject,
-                    'sender_email': sender_email,
-                    'sender_name': sender_name,
-                    'company_name': format_enum_for_display(primary_req.company_name),
-                    'received_datetime': received_datetime.isoformat() if received_datetime else None,
-                    'status': primary_req.status.value if primary_req.status else None,
-                    'assigned_to': _get_assigned_user_display(primary_req.user_id),
-                    'assigned_recruiters': _get_assigned_recruiters_display(primary_req.requirement_id, session=get_db_session()),
-                    'notes': primary_req.notes,
-                    'created_at': primary_req.created_at.isoformat() if primary_req.created_at else None,
-                    'updated_at': primary_req.updated_at.isoformat() if primary_req.updated_at else None,
-                    'thread_id': primary_req.email_details[0].thread_id if primary_req.email_details else None,
-                    'additional_remarks': primary_req.additional_remarks,
-                    'detected_category': category,
-                    'thread_size': len(group),
-                    'is_manual_requirement': primary_req.is_manual_requirement,
-                    'is_new_assignment': is_new_assignment,
-                    # Add all detailed requirement fields for the modal
-                    'department': primary_req.department,
-                    'location': primary_req.location,
-                    'shift': primary_req.shift,
-                    'job_type': primary_req.job_type,
-                    'hiring_manager': primary_req.hiring_manager,
-                    'experience_range': primary_req.experience_range,
-                    'skill_id': str(primary_req.skill_id) if primary_req.skill_id else None,
-                    'minimum_qualification': primary_req.minimum_qualification,
-                    'number_of_positions': primary_req.number_of_positions,
-                    'budget_ctc': primary_req.budget_ctc,
-                    'priority': primary_req.priority,
-                    'tentative_doj': primary_req.tentative_doj.isoformat() if primary_req.tentative_doj else None
-                })
-            else:
-                req = group[0]
-                # Check email category first (only for automatic requirements)
-                category = None
-                if not req.is_manual_requirement:
-                    category = get_category_for_requirement(req)
-                    current_app.logger.info(f"Processing single automatic requirement {req.requirement_id}: current status='{req.status}', detected category='{category}'")
-                    
-                    # Only update status if it's still in initial states
-                    if category and req.status in ['Open']:
-                        # Map email categories to status values
-                        category_to_status = {
-                            'candidate_submission': 'Candidate_Submission',
-                            'interview_scheduled': 'Interview_Scheduled',
-                            'offer_recommendation': 'Offer_Recommendation',
-                            'on_boarding': 'On_Boarding',
-                            'on_hold': 'On_Hold'
-                        }
-                        if category in category_to_status:
-                            old_status = req.status
-                            req.status = category_to_status[category]
-                            current_app.logger.info(f"Updated requirement {req.requirement_id} status from '{old_status}' to '{req.status}' based on category '{category}'")
-                    else:
-                        current_app.logger.info(f"Keeping requirement {req.requirement_id} status as '{req.status}' (already processed)")
-                else:
-                    current_app.logger.info(f"Processing single manual requirement {req.requirement_id}: keeping status as '{req.status}' (no automatic updates)")
-                
-                # Check if this is a new assignment (updated within 24 hours and current user is assigned)
-                is_new_assignment = False
-                if current_user and current_user.role.value == 'recruiter' and req.updated_at:
-                    time_diff = datetime.utcnow() - req.updated_at
-                    is_within_24_hours = time_diff.total_seconds() < 24 * 60 * 60  # 24 hours in seconds
-                    # Check if current user is assigned to this requirement
-                    is_assigned_to_user = (req.user_id == current_user.user_id) if current_user else False
-                    is_new_assignment = is_within_24_hours and is_assigned_to_user
-                
-                # Get email details for the requirement
-                email_subject = ''
-                sender_email = ''
-                sender_name = ''
-                received_datetime = None
-                thread_id = None
-                if req.email_details:
-                    email_subject = req.email_details[0].email_subject or ''
-                    sender_email = req.email_details[0].sender_email or ''
-                    sender_name = req.email_details[0].sender_name or ''
-                    received_datetime = req.email_details[0].received_datetime
-                    thread_id = req.email_details[0].thread_id
-                elif req.is_manual_requirement:
-                    # For manual requirements, use created_at as received_datetime
-                    received_datetime = req.created_at
-                
-                result.append({
-                    'id': req.requirement_id,
-                    'request_id': req.request_id,
-                    'job_title': req.job_title,
-                    'email_subject': email_subject,
-                    'sender_email': sender_email,
-                    'sender_name': sender_name,
-                    'company_name': format_enum_for_display(req.company_name),
-                    'received_datetime': received_datetime.isoformat() if received_datetime else None,
-                    'status': req.status.value if req.status else None,
-                    'assigned_to': _get_assigned_user_display(req.user_id),
-                    'assigned_recruiters': _get_assigned_recruiters_display(req.requirement_id, session=get_db_session()),
-                    'notes': req.notes,
-                    'created_at': req.created_at.isoformat() if req.created_at else None,
-                    'updated_at': req.updated_at.isoformat() if req.updated_at else None,
-                    'thread_id': thread_id,
-                    'additional_remarks': req.additional_remarks,
-                    'detected_category': category,
-                    'thread_size': 1,
-                    'is_manual_requirement': req.is_manual_requirement,
-                    'is_new_assignment': is_new_assignment,
-                    # Add all detailed requirement fields for the modal
-                    'department': format_enum_for_display(req.department),
-                    'location': req.location,
-                    'shift': format_enum_for_display(req.shift),
-                    'job_type': format_enum_for_display(req.job_type),
-                    'hiring_manager': req.hiring_manager,
-                    'experience_range': req.experience_range,
-                    'skill_id': str(req.skill_id) if req.skill_id else None,
-                    'minimum_qualification': req.minimum_qualification,
-                    'number_of_positions': req.number_of_positions,
-                    'budget_ctc': req.budget_ctc,
-                    'priority': format_enum_for_display(req.priority),
-                    'tentative_doj': req.tentative_doj.isoformat() if req.tentative_doj else None,
-                    # JD fields
-                    'job_description': req.job_description,
-                    'jd_path': req.jd_path,
-                    'job_file_name': req.job_file_name
-                })
+        for req in requirements:
+            req_id_str = str(req.requirement_id)
+            
+            result.append({
+                'id': req.requirement_id,
+                'request_id': req.request_id,
+                'job_title': req.job_title,
+                'email_subject': '',
+                'sender_email': '',
+                'sender_name': '',
+                'company_name': req.company_name,
+                'received_datetime': req.created_at.isoformat() if req.created_at else None,
+                'status': req.status,
+                'assigned_to': user_display_map.get(str(req.user_id)) if req.user_id else None,
+                'assigned_recruiters': assigned_recruiters_map.get(req_id_str, []),
+                'notes': req.notes,
+                'created_at': req.created_at.isoformat() if req.created_at else None,
+                'updated_at': req.updated_at.isoformat() if req.updated_at else None,
+                'additional_remarks': req.additional_remarks,
+                'is_manual_requirement': req.is_manual_requirement,
+                'priority': req.priority,
+                'department': req.department,
+                'location': req.location,
+                'shift': req.shift,
+                'job_type': req.job_type,
+                'hiring_manager': req.hiring_manager,
+                'experience_range': req.experience_range,
+                'minimum_qualification': req.minimum_qualification,
+                'number_of_positions': req.number_of_positions,
+                'budget_ctc': req.budget_ctc,
+                'tentative_doj': req.tentative_doj.isoformat() if req.tentative_doj else None,
+                'job_description': req.job_description,
+                'jd_path': req.jd_path,
+                'job_file_name': req.job_file_name
+            })
         
-        # Sort result by priority (Urgent > High > Medium > Low > None)
+        # Sort by priority (Urgent > High > Medium > Low > None)
         priority_order = {'Urgent': 1, 'High': 2, 'Medium': 3, 'Low': 4}
+        result.sort(key=lambda x: priority_order.get(x.get('priority'), 5))
         
-        def get_priority_sort_key(item):
-            priority = item.get('priority')
-            if priority is None or priority == '':
-                return 5  # None/empty priorities go last
-            return priority_order.get(priority, 5)  # Unknown priorities go last
-        
-        result.sort(key=get_priority_sort_key)
-        
-        get_db_session().commit()
-        return jsonify(result)
+        # Return paginated response with metadata
+        return jsonify({
+            'items': result,
+            'pagination': {
+                'page': page,
+                'pageSize': page_size,
+                'total': total_count,
+                'totalPages': (total_count + page_size - 1) // page_size if total_count > 0 else 0
+            }
+        })
     except Exception as e:
-        get_db_session().rollback()
         current_app.logger.error(f"Error in get_tracker_requirements: {str(e)}")
+        import traceback
+        current_app.logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @tracker_bp.route('/<string:request_id>', methods=['GET'])
@@ -681,31 +568,37 @@ def update_tracker_requirement(request_id):
             return jsonify({'error': 'No data provided'}), 400
         
         # Get current user for role-based validation
-        auth_header = request.headers.get('Authorization')
-        current_user = None
-        
-        if auth_header:
-            try:
-                parts = auth_header.split(' ')
-                if len(parts) == 2 and parts[0] == 'Bearer':
-                    username = parts[1].strip()
-                    from app.models.user import User
-                    current_user = get_db_session().query(User).filter_by(username=username).first()
-                    if not current_user:
-                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
-                    if not current_user:
-                        if username.endswith(' '):
-                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
-            except Exception as e:
-                current_app.logger.warning(f"Error parsing auth header: {str(e)}")
+        # Prefer middleware-populated authenticated user (JWT + Redis)
+        current_user = getattr(request, 'current_user', None)
+        if not current_user:
+            # Fallback: support legacy header-based username for backward compatibility
+            auth_header = request.headers.get('Authorization')
+            if auth_header:
+                try:
+                    parts = auth_header.split(' ')
+                    if len(parts) == 2 and parts[0] == 'Bearer':
+                        from app.models.user import User
+                        username = parts[1].strip()
+                        # Try decode as JWT to extract identity/subject
+                        try:
+                            from flask_jwt_extended import decode_token
+                            token_data = decode_token(username)
+                            username = token_data.get('sub') or token_data.get('identity') or username
+                        except Exception:
+                            pass
+                        current_user = get_db_session().query(User).filter_by(username=username).first() or \
+                                       get_db_session().query(User).filter_by(username=f"{username} ").first() or \
+                                       (get_db_session().query(User).filter_by(username=username.rstrip()).first() if username.endswith(' ') else None)
+                except Exception as e:
+                    current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
         # Check if trying to set status to "On Hold" - only admins can do this
         if 'status' in data and data['status'] == 'On_Hold':
-            if not current_user or current_user.role.value != 'admin':
+            if not current_user or current_user.role != 'admin':
                 return jsonify({'error': 'Only administrators can set requirements to "On Hold" status'}), 403
         
         # Check if trying to update an "On Hold" requirement - only admins can do this
-        if requirement.status == 'On_Hold' and current_user and current_user.role.value == 'recruiter':
+        if requirement.status == 'On_Hold' and current_user and current_user.role == 'recruiter':
             return jsonify({'error': 'Recruiters cannot modify requirements that are on hold'}), 403
         
         # Update allowed fields - now including requirement details
@@ -716,10 +609,58 @@ def update_tracker_requirement(request_id):
             'priority', 'additional_remarks', 'company_name'
         ]
         
+        # Helper function to get valid enum values from database
+        def get_valid_enum_values(enum_type):
+            """Fetch valid enum values from PostgreSQL"""
+            try:
+                from sqlalchemy import text
+                enum_type_mapping = {
+                    'company_name': 'companyenum',
+                    'department': 'departmentenum',
+                    'shift': 'shiftenum',
+                    'job_type': 'jobtypeenum',
+                    'priority': 'priorityenum'
+                }
+                
+                db_enum_type = enum_type_mapping.get(enum_type)
+                if not db_enum_type:
+                    return []
+                
+                query = text("""
+                    SELECT enumlabel 
+                    FROM pg_enum 
+                    WHERE enumtypid = (
+                        SELECT oid FROM pg_type WHERE typname = :enum_type
+                    ) 
+                    ORDER BY enumlabel
+                """)
+                
+                result = get_db_session().execute(query, {'enum_type': db_enum_type}).fetchall()
+                return [row[0] for row in result]
+            except Exception as e:
+                current_app.logger.error(f"Error fetching enum values for {enum_type}: {str(e)}")
+                return []
+        
         # Helper function to convert display format to enum format
         def convert_to_enum_format(value, field_name):
             if not value:
                 return value
+            
+            # For company_name, validate against database enum values
+            if field_name == 'company_name':
+                valid_values = get_valid_enum_values('company_name')
+                if valid_values:
+                    # Try exact match first
+                    if value in valid_values:
+                        return value
+                    # Try case-insensitive match
+                    value_normalized = value.replace(' ', '_')
+                    for valid_value in valid_values:
+                        if valid_value.lower() == value_normalized.lower():
+                            return valid_value
+                    # If no match found, log warning and return None to prevent invalid enum error
+                    current_app.logger.warning(f"Invalid company_name value '{value}' not found in enum. Valid values: {valid_values}")
+                    return None
             
             # Mapping for specific conversions
             conversions = {
@@ -770,7 +711,14 @@ def update_tracker_requirement(request_id):
                     if not value or (isinstance(value, str) and value.strip() == ''):
                         value = None
                     else:
+                        original_value = value
                         value = convert_to_enum_format(value, field)
+                        # If conversion returned None (invalid enum value), return error
+                        if value is None and original_value:
+                            valid_values = get_valid_enum_values(field)
+                            return jsonify({
+                                'error': f'Invalid {field.replace("_", " ")} value: "{original_value}". Valid values are: {", ".join(valid_values) if valid_values else "none available"}'
+                            }), 400
                 setattr(requirement, field, value)
         
         # Handle tentative_doj field specially for date conversion
@@ -810,7 +758,7 @@ def update_tracker_requirement(request_id):
                     user = get_db_session().query(User).filter_by(username=username).first()
                     if user:
                         # Only allow assignment to recruiters, not admins
-                        if user.role.value != 'recruiter':
+                        if user.role != 'recruiter':
                             return jsonify({'error': f'Only recruiters can be assigned to requirements. {username} is not a recruiter.'}), 400
                         recruiter_user_ids.append(user.user_id)
                         new_recruiters.add(user.username)
@@ -906,23 +854,43 @@ def delete_tracker_requirement(request_id):
         auth_header = request.headers.get('Authorization')
         current_user = None
         
+        current_app.logger.info(f"Archive request for {request_id} - Auth header present: {bool(auth_header)}")
+        
         if auth_header:
             try:
                 parts = auth_header.split(' ')
                 if len(parts) == 2 and parts[0] == 'Bearer':
-                    username = parts[1].strip()
+                    token = parts[1].strip()
+                    
+                    # Try to decode as JWT token first
+                    try:
+                        decoded = decode_token(token)
+                        username = decoded.get('sub')  # JWT identity is stored in 'sub' claim
+                        current_app.logger.info(f"Decoded JWT token, identity: '{username}'")
+                    except Exception as jwt_error:
+                        # Fallback to treating token as username (backward compatibility)
+                        current_app.logger.info(f"JWT decode failed ({jwt_error}), treating token as username")
+                        username = token
+                    
+                    current_app.logger.info(f"Looking up user with username: '{username}'")
                     from app.models.user import User
                     current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
                         current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
-                        if username.endswith(' '):
+                        if username and username.endswith(' '):
                             current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
+                    
+                    if current_user:
+                        current_app.logger.info(f"Found user: {current_user.username}, role: {current_user.role}")
+                    else:
+                        current_app.logger.warning(f"No user found for username: '{username}'")
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
         # Only admins can delete requirements
-        if not current_user or current_user.role.value != 'admin':
+        if not current_user or current_user.role != 'admin':
+            current_app.logger.warning(f"Archive denied - User: {current_user.username if current_user else 'None'}, Role: {current_user.role if current_user else 'N/A'}")
             return jsonify({'error': 'Only administrators can archive requirements'}), 403
         
         # Get the requirement (including already soft-deleted ones)
@@ -962,19 +930,29 @@ def restore_tracker_requirement(request_id):
             try:
                 parts = auth_header.split(' ')
                 if len(parts) == 2 and parts[0] == 'Bearer':
-                    username = parts[1].strip()
+                    token = parts[1].strip()
+                    
+                    # Try to decode as JWT token first
+                    try:
+                        decoded = decode_token(token)
+                        username = decoded.get('sub')  # JWT identity is stored in 'sub' claim
+                    except Exception as jwt_error:
+                        # Fallback to treating token as username (backward compatibility)
+                        current_app.logger.info(f"JWT decode failed ({jwt_error}), treating token as username")
+                        username = token
+                    
                     from app.models.user import User
                     current_user = get_db_session().query(User).filter_by(username=username).first()
                     if not current_user:
                         current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
                     if not current_user:
-                        if username.endswith(' '):
+                        if username and username.endswith(' '):
                             current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
             except Exception as e:
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
         # Only admins can restore requirements
-        if not current_user or current_user.role.value != 'admin':
+        if not current_user or current_user.role != 'admin':
             return jsonify({'error': 'Only administrators can restore archived requirements'}), 403
         
         # Get the requirement (including soft-deleted ones)
@@ -1031,13 +1009,26 @@ def get_archived_requirements():
                     pass
         
         # Only admins can view archived requirements
-        if not current_user or getattr(getattr(current_user, 'role', None), 'value', None) != 'admin':
+        if not current_user or current_user.role != 'admin':
             return jsonify({'error': 'Only administrators can view archived requirements'}), 403
         
         # Get all archived requirements
         archived_requirements = get_db_session().query(Requirement).filter(Requirement.deleted_at.isnot(None)).order_by(Requirement.deleted_at.desc()).all()
         
-        return jsonify([req.to_dict() for req in archived_requirements])
+        # Build response with deleted_by_name (username) instead of just UUID
+        from app.models.user import User
+        result = []
+        for req in archived_requirements:
+            req_dict = req.to_dict()
+            # Look up the username for deleted_by
+            if req.deleted_by:
+                deleter = get_db_session().query(User).filter_by(user_id=req.deleted_by).first()
+                req_dict['deleted_by_name'] = deleter.full_name if deleter else req_dict['deleted_by']
+            else:
+                req_dict['deleted_by_name'] = 'N/A'
+            result.append(req_dict)
+        
+        return jsonify(result)
         
     except Exception as e:
         current_app.logger.error(f"Error fetching archived requirements: {str(e)}")
@@ -1046,52 +1037,34 @@ def get_archived_requirements():
 @tracker_bp.route('/stats', methods=['GET'])
 @cache_response(ttl=300)  # Cache for 5 minutes
 def get_tracker_stats():
-    """Get tracker statistics"""
+    """Get tracker statistics for manual requirements only - single GROUP BY query."""
     try:
-        # Get manual requirements (these should always be included regardless of email subject)
-        manual_base_filter = [
+        # OPTIMIZATION: Use a single GROUP BY query to get all status counts at once
+        # This replaces 16 separate COUNT queries with just 1 query
+        
+        status_counts = get_db_session().query(
+            Requirement.status,
+            func.count(Requirement.requirement_id).label('count')
+        ).filter(
+            Requirement.deleted_at.is_(None),
             Requirement.requirement_id.isnot(None),
             Requirement.is_manual_requirement == True
-        ]
+        ).group_by(Requirement.status).all()
         
-        # Get automatic requirements (email-based) with existing filters
-        from app.models.email_details import EmailDetails
-        automatic_base_filter = [
-            Requirement.requirement_id.isnot(None),
-            Requirement.is_manual_requirement == False,
-            ~EmailDetails.email_subject.like('Re:%'),
-            ~EmailDetails.email_subject.like('Fw:%'),
-            ~EmailDetails.email_subject.like('Fwd:%'),
-            ~EmailDetails.email_subject.like('Forward:%')
-        ]
+        # Create a dictionary for O(1) lookup
+        counts_map = {row.status: row.count for row in status_counts}
         
-        # Combine counts for both manual and automatic requirements (excluding soft-deleted)
-        # For automatic requirements, we need to join with EmailDetails
-        from app.models.email_details import EmailDetails
-        automatic_query_base = get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).join(EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id)
+        # Calculate total
+        total_rfh = sum(counts_map.values())
         
-        total_rfh = get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter).count() + automatic_query_base.filter(*automatic_base_filter).count()
-        
-        open_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Open').count() + 
-                   automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Open').count())
-        
-        candidate_submission_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Candidate_Submission').count() + 
-                                   automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Candidate_Submission').count())
-        
-        interview_scheduled_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Interview_Scheduled').count() + 
-                                  automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Interview_Scheduled').count())
-        
-        offer_recommendation_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Offer_Recommendation').count() + 
-                                   automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Offer_Recommendation').count())
-        
-        on_boarding_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'On_Boarding').count() + 
-                          automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'On_Boarding').count())
-        
-        on_hold_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'On_Hold').count() + 
-                      automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'On_Hold').count())
-        
-        closed_rfh = (get_db_session().query(Requirement).filter(Requirement.deleted_at.is_(None)).filter(*manual_base_filter, Requirement.status == 'Closed').count() + 
-                     automatic_query_base.filter(*automatic_base_filter, Requirement.status == 'Closed').count())
+        # Map status values to their counts (handle both underscore and space formats)
+        open_rfh = counts_map.get('Open', 0)
+        candidate_submission_rfh = counts_map.get('Candidate_Submission', 0)
+        interview_scheduled_rfh = counts_map.get('Interview_Scheduled', 0)
+        offer_recommendation_rfh = counts_map.get('Offer_Recommendation', 0)
+        on_boarding_rfh = counts_map.get('On_Boarding', 0)
+        on_hold_rfh = counts_map.get('On_Hold', 0)
+        closed_rfh = counts_map.get('Closed', 0)
         
         return jsonify({
             'total': total_rfh,
@@ -1147,7 +1120,7 @@ def get_tracker_relationships():
                         'job_title': requirement.job_title,
                         'email_subject': requirement.email_details[0].email_subject if requirement.email_details else '',
                         'sender_name': requirement.email_details[0].sender_name if requirement.email_details else '',
-                        'company_name': format_enum_for_display(requirement.company_name)
+                        'company_name': requirement.company_name
                     },
                     'profiles': [],
                     'onboarded_count': 0
@@ -1226,13 +1199,13 @@ def get_tracker_relationships_by_request(request_id):
                 'location': profile.location,
                 'contact_no': profile.contact_no,
                 'email_id': profile.email_id,
-                'onboarded': profile.status and profile.status.value == 'onboarded',
+                'onboarded': profile.status and profile.status == 'onboarded',
                 'extracted_at': profile.created_at.isoformat() if profile.created_at else None
             }
             profiles_data.append(profile_data)
         
         # Calculate onboarding statistics
-        onboarded_count = len([p for p in profiles if p.status and p.status.value == 'onboarded'])
+        onboarded_count = len([p for p in profiles if p.status and p.status == 'onboarded'])
         
         return jsonify({
             'request_id': request_id,
@@ -1289,7 +1262,7 @@ def get_tracker_relationships_by_student(student_id):
                 'job_title': requirement.job_title,
                 'email_subject': requirement.email_details[0].email_subject if requirement.email_details else '',
                 'sender_name': requirement.email_details[0].sender_name if requirement.email_details else '',
-                'company_name': format_enum_for_display(requirement.company_name),
+                'company_name': requirement.company_name,
                 'location': requirement.location,
                 'experience_range': requirement.experience_range,
                 'skill_id': str(requirement.skill_id) if requirement.skill_id else None,
@@ -1508,9 +1481,9 @@ def get_requirements_with_categories():
                 'email_subject': req.email_details[0].email_subject if req.email_details else '',
                 'sender_email': req.email_details[0].sender_email if req.email_details else '',
                 'sender_name': req.email_details[0].sender_name if req.email_details else '',
-                'company_name': format_enum_for_display(req.company_name),
+                'company_name': req.company_name,
                 'received_datetime': req.email_details[0].received_datetime.isoformat() if req.email_details and req.email_details[0].received_datetime else None,
-                'status': req.status.value if req.status else None,
+                'status': req.status if req.status else None,
                 'assigned_to': _get_assigned_user_display(req.user_id),
                 'notes': req.notes,
                 'created_at': req.created_at.isoformat() if req.created_at else None,
@@ -1623,84 +1596,117 @@ def get_emails_for_request(request_id):
         return jsonify({'error': 'Failed to fetch emails'}), 500 
 
 @tracker_bp.route('/profiles-count', methods=['GET'])
+@require_domain_auth
 @cache_response(ttl=120, key_prefix='tracker_profiles_count')  # Cache for 2 minutes
 def get_profiles_count():
-    """Get profile counts for all tracker requirements - OPTIMIZED + CACHED"""
+    """Get profile counts for tracker requirements with server-side filtering and pagination - OPTIMIZED + CACHED"""
     try:
-        # Get user from request headers for role-based filtering
-        auth_header = request.headers.get('Authorization')
-        current_user = None
+        # Import SQLAlchemy operators at the top (needed for multiple filter blocks)
+        from sqlalchemy import or_, and_
+        from app.models.assignment import Assignment
         
-        if auth_header:
-            try:
-                parts = auth_header.split(' ')
-                if len(parts) == 2 and parts[0] == 'Bearer':
-                    username = parts[1].strip()  # Trim whitespace from username
-                    from app.models.user import User
-                    # Try exact match first, then try with trailing space (for backward compatibility)
-                    current_user = get_db_session().query(User).filter_by(username=username).first()
-                    if not current_user:
-                        # Try with trailing space (for data inconsistency)
-                        current_user = get_db_session().query(User).filter_by(username=f"{username} ").first()
-                    if not current_user:
-                        # Try without trailing space if username has one
-                        if username.endswith(' '):
-                            current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
-            except Exception as e:
-                current_app.logger.warning(f"Error parsing auth header: {str(e)}")
+        # Get pagination parameters
+        page = request.args.get('page', default=1, type=int)
+        page_size = request.args.get('pageSize', default=15, type=int)
+        limit = request.args.get('limit', type=int)  # For backward compatibility
         
-        # Get manual requirements (these should always be included regardless of email subject)
-        # Exclude project requirements from main tracker
-        manual_query = get_db_session().query(Requirement).filter(
-            Requirement.requirement_id.isnot(None),
-            Requirement.is_manual_requirement == True,
-            
-        )
+        # Get filter parameters
+        filter_status = request.args.get('status', type=str)
+        filter_company = request.args.get('company', type=str)
+        filter_job_title = request.args.get('jobTitle', type=str)
+        filter_assigned_to = request.args.get('assignedTo', type=str)
+        filter_priority = request.args.get('priority', type=str)
+        filter_department = request.args.get('department', type=str)
+        filter_location = request.args.get('location', type=str)
         
-        # Get automatic requirements (email-based) with existing filters
-        from app.models.email_details import EmailDetails
-        automatic_query = get_db_session().query(Requirement).join(
-            EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id
-        ).filter(
-            Requirement.requirement_id.isnot(None),
-            Requirement.is_manual_requirement == False,
-            ~EmailDetails.email_subject.like('Re:%'),
-            ~EmailDetails.email_subject.like('Fw:%'),
-            ~EmailDetails.email_subject.like('Fwd:%'),
-            ~EmailDetails.email_subject.like('Forward:%')
-        )
+        # Get authenticated user
+        current_user = getattr(request, 'current_user', None)
         
-        # Apply role-based filtering to both manual and automatic queries
-        if current_user and current_user.role.value == 'recruiter':
-            # For recruiters, only show requirements assigned to them AND not on hold
-            manual_query = manual_query.filter(
-                Requirement.user_id == current_user.user_id,
+        # Base query - fetch manual requirements only
+        query = get_db_session().query(Requirement)\
+            .filter(Requirement.deleted_at.is_(None))\
+            .filter(Requirement.requirement_id.isnot(None))\
+            .filter(Requirement.is_manual_requirement == True)
+        
+        # Apply role-based filtering
+        if current_user and current_user.role == 'recruiter':
+            query = query.filter(
+                or_(
+                    Requirement.user_id == current_user.user_id,
+                    Requirement.assignments.any(and_(Assignment.user_id == current_user.user_id, Assignment.is_active == True))
+                ),
                 Requirement.status != 'On_Hold'
             )
-            automatic_query = automatic_query.filter(
-                Requirement.user_id == current_user.user_id,
-                Requirement.status != 'On_Hold'
-            )
-            current_app.logger.info(f"Filtering requirements for recruiter: {current_user.username} (excluding on-hold requirements)")
+            current_app.logger.info(f"Filtering requirements for recruiter: {current_user.username}")
         elif current_user and current_user.role == 'admin':
-            # For admins, show all requirements including on-hold ones
             current_app.logger.info(f"Showing all requirements for admin: {current_user.username}")
+        
+        # Apply filters (only if not 'all')
+        if filter_status and filter_status != 'all':
+            # Normalize status: convert "candidate submission" to "Candidate_Submission"
+            status_map = {
+                'open': 'Open',
+                'candidate submission': 'Candidate_Submission',
+                'interview scheduled': 'Interview_Scheduled',
+                'offer recommendation': 'Offer_Recommendation',
+                'on boarding': 'On_Boarding',
+                'on hold': 'On_Hold',
+                'closed': 'Closed'
+            }
+            db_status = status_map.get(filter_status.lower(), filter_status)
+            query = query.filter(Requirement.status == db_status)
+        
+        if filter_company and filter_company != 'all':
+            query = query.filter(Requirement.company_name == filter_company)
+        
+        if filter_job_title and filter_job_title != 'all':
+            query = query.filter(Requirement.job_title == filter_job_title)
+        
+        if filter_priority and filter_priority != 'all':
+            query = query.filter(Requirement.priority == filter_priority)
+        
+        if filter_department and filter_department != 'all':
+            query = query.filter(Requirement.department == filter_department)
+        
+        if filter_location and filter_location != 'all':
+            query = query.filter(Requirement.location == filter_location)
+        
+        # For assigned_to filter, we need to check both user_id and assignments
+        if filter_assigned_to and filter_assigned_to != 'all':
+            # Get user_id for the recruiter username
+            recruiter_user = get_db_session().query(User).filter(
+                User.username == filter_assigned_to,
+                User.role == 'recruiter'
+            ).first()
+            
+            if recruiter_user:
+                query = query.filter(
+                    or_(
+                        Requirement.user_id == recruiter_user.user_id,
+                        Requirement.assignments.any(
+                            and_(
+                                Assignment.user_id == recruiter_user.user_id,
+                                Assignment.is_active == True
+                            )
+                        )
+                    )
+                )
+        
+        # Get total count BEFORE pagination (for pagination info)
+        total_count = query.count()
+        
+        # Apply pagination or limit
+        if limit:
+            # Backward compatibility: use limit if provided
+            requirements = query.order_by(Requirement.created_at.desc()).limit(limit).all()
         else:
-            # For unauthenticated users or unknown roles, show all (or you can restrict this)
-            current_app.logger.info("No user authentication found, showing all requirements")
+            # Use pagination
+            offset = (page - 1) * page_size
+            requirements = query.order_by(Requirement.created_at.desc()).offset(offset).limit(page_size).all()
         
-        # Execute both queries and combine results
-        manual_requirements = manual_query.order_by(Requirement.created_at.desc()).all()
-        automatic_requirements = automatic_query.order_by(EmailDetails.received_datetime.desc()).all()
+        current_app.logger.info(f"Profiles-count endpoint: Fetched {len(requirements)} requirements (page={page}, pageSize={page_size}, total={total_count})")
         
-        # Combine both sets
-        requirements = manual_requirements + automatic_requirements
-        
-        current_app.logger.info(f"Profiles-count endpoint: Found {len(manual_requirements)} manual requirements and {len(automatic_requirements)} automatic requirements")
-        for req in manual_requirements:
-            current_app.logger.info(f"Manual requirement in profiles-count: {req.requirement_id} - {req.job_title} (assigned_to: {req.user_id})")
-        for req in automatic_requirements:
-            current_app.logger.info(f"Automatic requirement in profiles-count: {req.requirement_id} - {req.job_title} (assigned_to: {req.user_id})")
+        current_app.logger.info(f"Profiles-count endpoint: Found {len(requirements)} requirements (limit={limit})")
         
         # OPTIMIZATION: Batch fetch all related data to avoid N+1 queries
         requirement_ids = [req.requirement_id for req in requirements]
@@ -1708,14 +1714,13 @@ def get_profiles_count():
         if requirement_ids:
             # OPTIMIZATION 1: Batch fetch profile counts using a single query with aggregation
             from sqlalchemy import func, case
-            from app.models.profile import ProfileStatusEnum
             
             profile_counts_query = get_db_session().query(
                 Profile.requirement_id,
                 func.count(Profile.profile_id).label('total_count'),
                 func.sum(
                     case(
-                        (Profile.status == ProfileStatusEnum.onboarded, 1),
+                        (Profile.status == 'onboarded', 1),
                         else_=0
                     )
                 ).label('onboarded_count')
@@ -1755,39 +1760,24 @@ def get_profiles_count():
                     assigned_recruiters_map[req_id_str] = []
                 assigned_recruiters_map[req_id_str].append(row.username)
             
-            # OPTIMIZATION 3: Update in-progress metrics first to ensure real-time accuracy
-            from app.models.sla_tracker import SLATracker, SLAStatusEnum
-            try:
-                SLATracker.update_in_progress_metrics()
-                current_app.logger.debug("Updated in-progress SLA metrics before querying breach times")
-            except Exception as e:
-                current_app.logger.warning(f"Error updating in-progress metrics: {str(e)}")
+            # OPTIMIZATION 3: Batch fetch user display names (avoid N+1 queries)
+            user_ids = [req.user_id for req in requirements if req.user_id]
+            user_display_map = {}
+            if user_ids:
+                users_query = get_db_session().query(
+                    User.user_id,
+                    User.username,
+                    User.role
+                ).filter(User.user_id.in_(user_ids)).all()
+                
+                for row in users_query:
+                    # Only show recruiters, not admins (matching _get_assigned_user_display behavior)
+                    if row.role == 'recruiter':
+                        user_display_map[str(row.user_id)] = row.username
             
-            # Batch fetch breach times using a single query
+            # OPTIMIZATION 4: Batch fetch breach times using a single query (NO SLA updates on read!)
             from sqlalchemy.sql import func as sqlfunc
             from datetime import datetime
-            
-            # Get all in-progress trackers for these requirements
-            in_progress_trackers = get_db_session().query(SLATracker).filter(
-                SLATracker.requirement_id.in_(requirement_ids),
-                SLATracker.step_completed_at.is_(None)
-            ).all()
-            
-            # Calculate breach hours for in-progress steps that are actually breaching
-            for tracker in in_progress_trackers:
-                if tracker.step_started_at:
-                    current_duration = (datetime.utcnow() - tracker.step_started_at).total_seconds() / 3600
-                    if current_duration > tracker.sla_hours:
-                        # This step is breaching, update its metrics
-                        tracker.calculate_sla_metrics()
-                        get_db_session().add(tracker)
-            
-            # Commit the updated metrics
-            try:
-                get_db_session().commit()
-            except Exception as e:
-                current_app.logger.warning(f"Error committing updated SLA metrics: {str(e)}")
-                get_db_session().rollback()
             
             # Subquery to get the max breach hours for each requirement
             # Now includes both marked as breached and in-progress steps that are actually breaching
@@ -1796,7 +1786,7 @@ def get_profiles_count():
                 sqlfunc.max(SLATracker.sla_breach_hours).label('max_breach_hours')
             ).filter(
                 SLATracker.requirement_id.in_(requirement_ids),
-                SLATracker.sla_status == SLAStatusEnum.breached
+                SLATracker.sla_status == 'breached'
             ).group_by(SLATracker.requirement_id).subquery()
             
             # Get the actual breach records
@@ -1808,7 +1798,7 @@ def get_profiles_count():
                 (SLATracker.requirement_id == max_breach_subquery.c.requirement_id) &
                 (SLATracker.sla_breach_hours == max_breach_subquery.c.max_breach_hours)
             ).filter(
-                SLATracker.sla_status == SLAStatusEnum.breached
+                SLATracker.sla_status == 'breached'
             ).all()
             
             # Create lookup dictionary for breach times
@@ -1828,6 +1818,7 @@ def get_profiles_count():
         else:
             profile_counts_map = {}
             assigned_recruiters_map = {}
+            user_display_map = {}
             breach_times_map = {}
         
         # Build result using pre-fetched data (no more N+1 queries!)
@@ -1849,13 +1840,13 @@ def get_profiles_count():
             req_dict['selected_profiles_count'] = onboarded_count  # Add selected_profiles_count for consistency
             req_dict['breach_time_display'] = breach_time_display
             
-            # Add assignment information from pre-fetched data
-            req_dict['assigned_to'] = _get_assigned_user_display(req.user_id)
+            # Add assignment information from pre-fetched data (no N+1 queries!)
+            req_dict['assigned_to'] = user_display_map.get(str(req.user_id)) if req.user_id else None
             req_dict['assigned_recruiters'] = assigned_recruiters_map.get(req_id_str, [])
             
             # Check if this is a new assignment (updated within 24 hours and current user is assigned)
             is_new_assignment = False
-            if current_user and current_user.role.value == 'recruiter' and req.updated_at:
+            if current_user and current_user.role == 'recruiter' and req.updated_at:
                 time_diff = datetime.utcnow() - req.updated_at
                 is_within_24_hours = time_diff.total_seconds() < 24 * 60 * 60  # 24 hours in seconds
                 # Check if current user is assigned to this requirement
@@ -1876,7 +1867,21 @@ def get_profiles_count():
         
         result.sort(key=get_priority_sort_key)
         
-        return jsonify({'requirements': result})
+        # Return paginated response if pagination is used, otherwise return old format for backward compatibility
+        if limit is None:
+            # Paginated response format
+            return jsonify({
+                'items': result,
+                'pagination': {
+                    'page': page,
+                    'pageSize': page_size,
+                    'total': total_count,
+                    'totalPages': (total_count + page_size - 1) // page_size if total_count > 0 else 0
+                }
+            })
+        else:
+            # Backward compatibility: old format with 'requirements' key
+            return jsonify({'requirements': result})
     except Exception as e:
         current_app.logger.error(f"Error fetching requirements with profile counts: {str(e)}")
         import traceback
@@ -1973,7 +1978,7 @@ def get_closed_requirements():
             # Calculate metrics
             profiles_count = len(profiles)
             # Calculate selected profiles count from profile status
-            selected_profiles_count = len([p for p in profiles if p.status and p.status.value == 'onboarded'])
+            selected_profiles_count = len([p for p in profiles if p.status and p.status == 'onboarded'])
             
             # Build assigned recruiters list (active assignments) and legacy primary name
             assigned_recruiters = []
@@ -2001,7 +2006,7 @@ def get_closed_requirements():
             closed_data.append({
                 'request_id': requirement.request_id,  # Use request_id instead of requirement_id for proper format
                 'job_title': requirement.job_title,
-                'company_name': format_enum_for_display(requirement.company_name),
+                'company_name': requirement.company_name,
                 'overall_time': requirement.get_overall_time(),
                 'recruiter_name': recruiter_name,  # legacy for backward compatibility
                 'assigned_recruiters': assigned_recruiters,
@@ -2164,15 +2169,14 @@ def create_profiles():
                 source_value = profile_data.get('source', '').strip()
                 if source_value:
                     try:
-                        from app.models.profile import SourceEnum
-                        # Convert string to enum by value
-                        for enum_member in SourceEnum:
-                            if enum_member.value == source_value:
-                                profile.source = enum_member
-                                break
+                        from app.utils.enum_utils import EnumRegistry
+                        # Validate source value against DB enum
+                        if EnumRegistry.is_valid('source', source_value):
+                            profile.source = source_value
                         else:
                             # If no match found, log warning and set to None
-                            current_app.logger.warning(f"Invalid source value '{source_value}'. Valid options: {[e.value for e in SourceEnum]}")
+                            valid_sources = EnumRegistry.get_values('source')
+                            current_app.logger.warning(f"Invalid source value '{source_value}'. Valid options: {valid_sources}")
                             profile.source = None
                     except Exception as e:
                         current_app.logger.warning(f"Error processing source value '{source_value}': {str(e)}")
@@ -2212,9 +2216,8 @@ def create_profiles():
         
         # Update requirement status to Candidate_Submission if it's still Open
         try:
-            from app.models.requirement import RequirementStatusEnum
-            if requirement.status == RequirementStatusEnum.Open:
-                requirement.status = RequirementStatusEnum.Candidate_Submission
+            if requirement.status == 'Open':
+                requirement.status = 'Candidate_Submission'
                 requirement.updated_at = datetime.utcnow()
         except Exception as e:
             current_app.logger.warning(f"Could not set requirement status to Candidate_Submission on profile creation: {str(e)}")
@@ -2315,7 +2318,7 @@ def move_profile():
                 current_app.logger.warning(f"Error parsing auth header: {str(e)}")
         
         # Check permissions
-        if current_user and current_user.role.value == 'recruiter':
+        if current_user and current_user.role == 'recruiter':
             # For recruiters, check if they have access to both requirements
             from_requirement = get_db_session().query(Requirement).filter_by(request_id=from_request_id).first()
             to_requirement = get_db_session().query(Requirement).filter_by(request_id=to_request_id).first()
@@ -2464,8 +2467,7 @@ def can_move_profile(profile_id, request_id):
                 'error_code': 'TARGET_REQUIREMENT_NOT_FOUND'
             }), 404
         
-        from app.models.requirement import RequirementStatusEnum
-        if target_requirement.status == RequirementStatusEnum.Closed:
+        if target_requirement.status == 'Closed':
             return jsonify({
                 'can_move': False,
                 'error': 'Cannot move profile to a closed requirement',
@@ -2476,7 +2478,7 @@ def can_move_profile(profile_id, request_id):
         
         if validation_result['valid']:
             # Check permissions if user is a recruiter
-            if current_user and current_user.role.value == 'recruiter':
+            if current_user and current_user.role == 'recruiter':
                 target_requirement = get_db_session().query(Requirement).filter_by(request_id=request_id).first()
                 if target_requirement:
                     from_assigned = current_requirement.is_assigned_to(current_user.username, session=get_db_session())
@@ -2510,4 +2512,89 @@ def can_move_profile(profile_id, request_id):
             'can_move': False,
             'error': f'Internal server error: {str(e)}',
             'error_code': 'INTERNAL_ERROR'
-        }), 500 
+        }), 500
+
+
+@tracker_bp.route('/recruiter-stats', methods=['GET'])
+@require_domain_auth
+@cache_response(ttl=120, key_prefix='recruiter_stats')
+def get_recruiter_stats():
+    """
+    Get monthly performance stats for the logged-in recruiter.
+    Returns profiles added, profiles selected (screening), and profiles joined (onboarded).
+    """
+    try:
+        from app.models.screening import Screening
+        from calendar import monthrange
+        
+        # Get current user from auth header
+        auth_header = request.headers.get('Authorization')
+        current_user = None
+        
+        if auth_header:
+            try:
+                parts = auth_header.split(' ')
+                if len(parts) == 2 and parts[0] == 'Bearer':
+                    token = parts[1].strip()
+                    decoded = decode_token(token)
+                    username = decoded.get('sub')
+                    if username:
+                        current_user = get_db_session().query(User).filter_by(username=username.rstrip()).first()
+            except Exception as e:
+                current_app.logger.warning(f"Error decoding token for recruiter-stats: {str(e)}")
+        
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        recruiter_id = current_user.user_id
+        
+        # Calculate current calendar month date range
+        now = datetime.utcnow()
+        month_start = datetime(now.year, now.month, 1)
+        last_day = monthrange(now.year, now.month)[1]
+        month_end = datetime(now.year, now.month, last_day, 23, 59, 59)
+        month_name = now.strftime('%B %Y')
+        
+        # Query 1: Profiles Added - profiles created by this recruiter in current month
+        profiles_added = get_db_session().query(func.count(Profile.profile_id)).filter(
+            Profile.created_by_recruiter == recruiter_id,
+            Profile.created_at >= month_start,
+            Profile.created_at <= month_end,
+            Profile.is_deleted == False
+        ).scalar() or 0
+        
+        # Query 2: Profiles Selected - screening records with status='selected' created by this recruiter
+        profiles_selected = get_db_session().query(func.count(Screening.screening_id)).filter(
+            Screening.created_by == recruiter_id,
+            Screening.status == 'selected',
+            Screening.created_at >= month_start,
+            Screening.created_at <= month_end,
+            Screening.is_deleted == False
+        ).scalar() or 0
+        
+        # Query 3: Profiles Joined - profiles with status='onboarded' created by this recruiter, updated in current month
+        profiles_joined = get_db_session().query(func.count(Profile.profile_id)).filter(
+            Profile.created_by_recruiter == recruiter_id,
+            Profile.status == 'onboarded',
+            Profile.updated_at >= month_start,
+            Profile.updated_at <= month_end,
+            Profile.is_deleted == False
+        ).scalar() or 0
+        
+        return jsonify({
+            'success': True,
+            'profiles_added': profiles_added,
+            'profiles_selected': profiles_selected,
+            'profiles_joined': profiles_joined,
+            'month': month_name
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error fetching recruiter stats: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch recruiter stats'
+        }), 500

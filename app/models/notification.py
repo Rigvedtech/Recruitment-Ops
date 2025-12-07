@@ -1,8 +1,11 @@
+"""
+Notification Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from datetime import datetime, timezone, timedelta
 from app.database import db, GUID, postgresql_uuid_default
 import uuid
 import pytz
-import enum
 from flask import g, current_app
 from sqlalchemy.orm import sessionmaker
 
@@ -38,19 +41,13 @@ def get_db_session():
 # IST timezone
 IST = pytz.timezone('Asia/Kolkata')
 
-class NotificationTypeEnum(enum.Enum):
-    info = "info"
-    warning = "warning"
-    error = "error"
-    success = "success"
-    new_assignment = "new_assignment"
 
 class Notification(db.Model):
     __tablename__ = 'notifications'
     
     notification_id = db.Column(GUID, primary_key=True, server_default=postgresql_uuid_default())
     user_id = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=False)
-    type = db.Column(db.Enum(NotificationTypeEnum), nullable=False)
+    type = db.Column(db.String(30), nullable=False)  # Uses PostgreSQL enum values as strings
     title = db.Column(db.String(255), nullable=False)
     message = db.Column(db.Text, nullable=False)
     data = db.Column(db.Text, nullable=True)
@@ -67,7 +64,7 @@ class Notification(db.Model):
     # Relationships are defined in the User model to avoid conflicts
     
     def __repr__(self):
-        return f'<Notification {self.notification_id}: {self.type.value if self.type else None} for User {self.user_id}>'
+        return f'<Notification {self.notification_id}: {self.type} for User {self.user_id}>'
     
     def to_dict(self):
         """Convert notification to dictionary with IST timezone information"""
@@ -97,7 +94,7 @@ class Notification(db.Model):
         return {
             'notification_id': str(self.notification_id) if self.notification_id else None,
             'user_id': str(self.user_id) if self.user_id else None,
-            'type': self.type.value if self.type else None,
+            'type': self.type,  # Already a string
             'title': self.title,
             'message': self.message,
             'data': parsed_data,

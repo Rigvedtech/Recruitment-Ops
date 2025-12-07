@@ -1,12 +1,12 @@
+"""
+User Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from app.database import db, GUID, postgresql_uuid_default
 from datetime import datetime
 import bcrypt
 import uuid
-import enum
 
-class UserRoleEnum(enum.Enum):
-    admin = "admin"
-    recruiter = "recruiter"
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -17,7 +17,7 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
     phone_number = db.Column(db.Numeric(10, 0), unique=True, nullable=True)
-    role = db.Column(db.Enum(UserRoleEnum), nullable=False, default=UserRoleEnum.recruiter)
+    role = db.Column(db.String(20), nullable=False, default='recruiter')  # Uses PostgreSQL enum values as strings
     otp = db.Column(db.Numeric(6, 0), nullable=True)
     otp_expiry_time = db.Column(db.DateTime, nullable=True)
     failed_attempts = db.Column(db.Integer, default=0, nullable=False)
@@ -55,7 +55,7 @@ class User(db.Model):
             'full_name': self.full_name,
             'email': self.email,
             'phone_number': str(self.phone_number) if self.phone_number else None,
-            'role': self.role.value if self.role else None,
+            'role': self.role,  # Already a string
             'otp': str(self.otp) if self.otp else None,
             'otp_expiry_time': self.otp_expiry_time.isoformat() if self.otp_expiry_time else None,
             'failed_attempts': self.failed_attempts,
@@ -69,4 +69,4 @@ class User(db.Model):
         }
     
     def __repr__(self):
-        return f'<User {self.username} ({self.role.value if self.role else None})>' 
+        return f'<User {self.username} ({self.role})>'

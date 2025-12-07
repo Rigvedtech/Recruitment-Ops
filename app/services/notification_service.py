@@ -417,7 +417,7 @@ class NotificationService:
                 current_app.logger.warning(f"User {user_id} not found")
                 return False
             
-            if user_role and user_role.value == 'admin':
+            if user_role and user_role == 'admin':
                 # Admin can mark any notification as read
                 notification = get_db_session().query(Notification).filter_by(notification_id=notification_id).first()
             else:
@@ -428,7 +428,7 @@ class NotificationService:
                 ).first()
             
             if not notification:
-                if user_role and user_role.value == 'admin':
+                if user_role and user_role == 'admin':
                     current_app.logger.warning(f"Notification {notification_id} not found")
                 else:
                     current_app.logger.warning(f"Notification {notification_id} not found for user {user_id}")
@@ -466,7 +466,7 @@ class NotificationService:
                 current_app.logger.warning(f"User {user_id} not found")
                 return False
             
-            if user_role and user_role.value == 'admin':
+            if user_role and user_role == 'admin':
                 # Admin marks ALL unread notifications as read (from all users)
                 session = get_db_session()
                 all_unread_notifications = session.query(Notification).filter_by(is_read=False).all()

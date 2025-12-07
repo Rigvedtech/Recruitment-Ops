@@ -1,23 +1,17 @@
+"""
+SLAConfig Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from datetime import datetime, timedelta
 from app.database import db, GUID, postgresql_uuid_default
 import uuid
-import enum
 
-class StepNameEnum(enum.Enum):
-    candidate_submission = "candidate_submission"
-    screening = "screening"
-    interview_scheduled = "interview_scheduled"
-    interview_round_1 = "interview_round_1"
-    interview_round_2 = "interview_round_2"
-    offered = "offered"
-    onboarding = "onboarding"
-    open = "open"
 
 class SLAConfig(db.Model):
     __tablename__ = 'sla_config'
     
     sla_config_id = db.Column(GUID, primary_key=True, server_default=postgresql_uuid_default())
-    step_name = db.Column(db.Enum(StepNameEnum), nullable=False, unique=True)
+    step_name = db.Column(db.String(30), nullable=False, unique=True)  # Uses PostgreSQL enum values as strings
     sla_hours = db.Column(db.Integer, nullable=False, default=24)
     sla_days = db.Column(db.Integer, nullable=False, default=1)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
@@ -40,8 +34,8 @@ class SLAConfig(db.Model):
         return {
             'id': str(self.sla_config_id) if self.sla_config_id else None,
             'sla_config_id': str(self.sla_config_id) if self.sla_config_id else None,
-            'step_name': self.step_name.value if self.step_name else None,
-            'step_display_name': self.step_name.value.replace('_', ' ').title() if self.step_name else None,
+            'step_name': self.step_name,  # Already a string
+            'step_display_name': self.step_name.replace('_', ' ').title() if self.step_name else None,
             'sla_hours': self.sla_hours,
             'sla_days': self.sla_days,
             'is_active': self.is_active,
@@ -66,9 +60,9 @@ class SLAConfig(db.Model):
         return db.session.query(cls).filter_by(is_active=True).order_by(cls.priority).all()
     
     @classmethod
-    def get_config_by_step(cls, step_name: StepNameEnum):
-        """Get SLA configuration for a specific step"""
-        return db.session.query(cls).filter_by(step_name=step_name.value, is_active=True).first()
+    def get_config_by_step(cls, step_name: str):
+        """Get SLA configuration for a specific step (accepts string value)"""
+        return db.session.query(cls).filter_by(step_name=step_name, is_active=True).first()
     
     @classmethod
     def initialize_default_configs(cls):
@@ -76,58 +70,59 @@ class SLAConfig(db.Model):
         # Delete all existing configurations first
         db.session.query(cls).delete()
         
+        # Default configs use string values directly from PostgreSQL enum
         default_configs = [
             {
-                'step_name': StepNameEnum.open,
+                'step_name': 'open',
                 'sla_hours': 24,
                 'sla_days': 1,
                 'priority': 1,
                 'description': 'Time to start working on the requirement after it is opened'
             },
             {
-                'step_name': StepNameEnum.candidate_submission,
+                'step_name': 'candidate_submission',
                 'sla_hours': 24,
                 'sla_days': 1,
                 'priority': 2,
                 'description': 'Time to submit candidate profiles after requirement received'
             },
             {
-                'step_name': StepNameEnum.screening,
+                'step_name': 'screening',
                 'sla_hours': 48,
                 'sla_days': 2,
                 'priority': 3,
                 'description': 'Time to complete initial screening of candidates'
             },
             {
-                'step_name': StepNameEnum.interview_scheduled,
+                'step_name': 'interview_scheduled',
                 'sla_hours': 48,
                 'sla_days': 2,
                 'priority': 4,
                 'description': 'Time to schedule interviews after screening'
             },
             {
-                'step_name': StepNameEnum.interview_round_1,
+                'step_name': 'interview_round_1',
                 'sla_hours': 168,
                 'sla_days': 2,
                 'priority': 5,
                 'description': 'Time to complete first round of interviews'
             },
             {
-                'step_name': StepNameEnum.interview_round_2,
+                'step_name': 'interview_round_2',
                 'sla_hours': 48,
                 'sla_days': 2,
                 'priority': 6,
                 'description': 'Time to complete second round of interviews'
             },
             {
-                'step_name': StepNameEnum.offered,
+                'step_name': 'offered',
                 'sla_hours': 48,
                 'sla_days': 2,
                 'priority': 7,
                 'description': 'Time to make offer recommendation after final interview'
             },
             {
-                'step_name': StepNameEnum.onboarding,
+                'step_name': 'onboarding',
                 'sla_hours': 96,
                 'sla_days': 4,
                 'priority': 8,

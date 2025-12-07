@@ -110,7 +110,8 @@ const NavigationWrapper: React.FC<NavigationWrapperProps> = ({ children }) => {
     // Dispatch custom event to notify other components
     window.dispatchEvent(new Event('userStateChanged'));
     
-    window.location.href = '/login';
+    // Use Next.js router for client-side navigation (no full page reload)
+    router.push('/login');
   };
 
   const handleLogoClick = () => {

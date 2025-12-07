@@ -1,11 +1,11 @@
+"""
+Screening Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from datetime import datetime
 from app.database import db, GUID, postgresql_uuid_default
 import uuid
-import enum
 
-class ScreeningStatusEnum(enum.Enum):
-    selected = "selected"
-    rejected = "rejected"
 
 class Screening(db.Model):
     __tablename__ = 'screening'
@@ -17,7 +17,7 @@ class Screening(db.Model):
     requirement_id = db.Column(GUID, db.ForeignKey('requirements.requirement_id'), nullable=False)
     profile_id = db.Column(GUID, db.ForeignKey('profiles.profile_id'), nullable=False)
     start_time = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.Enum(ScreeningStatusEnum), nullable=False)
+    status = db.Column(db.String(20), nullable=False)  # Uses PostgreSQL enum values as strings
     status_timestamp = db.Column(db.DateTime, nullable=False)
     active = db.Column(db.Boolean, default=True, nullable=False)
     remark = db.Column(db.Text, nullable=True)
@@ -40,7 +40,7 @@ class Screening(db.Model):
             'requirement_id': str(self.requirement_id) if self.requirement_id else None,
             'profile_id': str(self.profile_id) if self.profile_id else None,
             'start_time': self.start_time.isoformat() if self.start_time else None,
-            'status': self.status.value if self.status else None,
+            'status': self.status,  # Already a string
             'status_timestamp': self.status_timestamp.isoformat() if self.status_timestamp else None,
             'active': self.active,
             'remark': self.remark,

@@ -126,7 +126,7 @@ export default function EmailsPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Error</h1>
           <p className="text-gray-600">{error}</p>
           <button
-            onClick={() => window.history.back()}
+            onClick={() => router.back()}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Go Back
@@ -151,33 +151,33 @@ export default function EmailsPage() {
 
                 if (source === 'recruiter') {
                   // Came from recruiter page, go back to recruiter
-                  window.location.href = '/recruiter';
+                  router.push('/recruiter');
                 } else if (source === 'tracker' && storedUser) {
                   // Came from tracker page, check user role
                   try {
                     const userData = JSON.parse(storedUser);
                     if (userData.role === 'admin') {
-                      window.location.href = '/tracker';
+                      router.push('/tracker');
                     } else {
-                      window.location.href = '/recruiter';
+                      router.push('/recruiter');
                     }
                   } catch (error) {
-                    window.history.back();
+                    router.back();
                   }
                 } else if (storedUser) {
                   // No source stored, use default logic
                   try {
                     const userData = JSON.parse(storedUser);
                     if (userData.role === 'admin') {
-                      window.location.href = '/tracker';
+                      router.push('/tracker');
                     } else {
-                      window.location.href = '/recruiter';
+                      router.push('/recruiter');
                     }
                   } catch (error) {
-                    window.history.back();
+                    router.back();
                   }
                 } else {
-                  window.history.back();
+                  router.back();
                 }
               }}
               className="text-gray-600 hover:text-gray-900"

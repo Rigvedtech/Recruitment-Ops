@@ -13,6 +13,7 @@ interface Requirement {
   assigned_to: string;
   assigned_recruiters: string[];
   is_manual_requirement?: boolean;
+  is_deleted?: boolean;
   created_at: string;
   updated_at: string;
   priority?: string;
@@ -48,8 +49,11 @@ const AdminRFHPage: React.FC = () => {
         api.get('/users/recruiters')
       ]);
       
+      // Filter out deleted requirements
+      const activeRequirements = requirementsData.filter((req: Requirement) => !req.is_deleted);
+      
       // Sort requirements: unassigned first (by created_at DESC), then assigned (by created_at DESC)
-      const sortedRequirements = requirementsData.sort((a: Requirement, b: Requirement) => {
+      const sortedRequirements = activeRequirements.sort((a: Requirement, b: Requirement) => {
         // Check if requirement is unassigned
         const aAssignedRecruiters = a.assigned_recruiters || [];
         const bAssignedRecruiters = b.assigned_recruiters || [];
@@ -183,13 +187,13 @@ const AdminRFHPage: React.FC = () => {
         {/* Requirements Table */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 table-auto">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Request ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                     Title
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -254,8 +258,8 @@ const AdminRFHPage: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 max-w-xs truncate">
+                    <td className="px-6 py-4" style={{ maxWidth: 'none', width: 'auto' }}>
+                      <div className="text-sm text-gray-900 break-words whitespace-normal" style={{ maxWidth: 'none' }}>
                         {requirement.job_title || requirement.email_subject}
                       </div>
                     </td>

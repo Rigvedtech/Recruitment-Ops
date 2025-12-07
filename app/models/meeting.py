@@ -1,24 +1,20 @@
+"""
+Meeting Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from datetime import datetime
 from typing import Dict, Optional
 
 from app.database import db, GUID, postgresql_uuid_default
 import uuid
-import enum
 
-class RoundTypeEnum(enum.Enum):
-    interview_scheduled = "interview_scheduled"
-    interview_round_1 = "interview_round_1"
-    interview_round_2 = "interview_round_2"
-    # Legacy values for backward compatibility
-    round1 = "round1"
-    round2 = "round2"
 
 class Meeting(db.Model):
     __tablename__ = 'meetings'
 
     meeting_id = db.Column(GUID, primary_key=True, server_default=postgresql_uuid_default())
     profile_id = db.Column(GUID, db.ForeignKey('profiles.profile_id'), nullable=True)
-    round_type = db.Column(db.Enum(RoundTypeEnum), nullable=False, default=RoundTypeEnum.interview_scheduled)
+    round_type = db.Column(db.String(30), nullable=False, default='interview_scheduled')  # Uses PostgreSQL enum values as strings
     meet_link = db.Column(db.Text, nullable=False)
     start_time = db.Column(db.DateTime, nullable=True)
     end_time = db.Column(db.DateTime, nullable=True)
@@ -40,7 +36,7 @@ class Meeting(db.Model):
         return {
             'meeting_id': str(self.meeting_id) if self.meeting_id else None,
             'profile_id': str(self.profile_id) if self.profile_id else None,
-            'round_type': self.round_type.value if self.round_type else None,
+            'round_type': self.round_type,  # Already a string
             'meet_link': self.meet_link,
             'start_time': self.start_time.isoformat() if self.start_time else None,
             'end_time': self.end_time.isoformat() if self.end_time else None,
@@ -109,7 +105,7 @@ class Meeting(db.Model):
                     'start_time': meeting.start_time.isoformat() if meeting.start_time else None,
                     'end_time': meeting.end_time.isoformat() if meeting.end_time else None,
                     'subject': meeting.subject,
-                    'round_type': meeting.round_type.value
+                    'round_type': meeting.round_type  # Already a string
                 }
         
         return result
@@ -157,7 +153,7 @@ class Meeting(db.Model):
                 'start_time': meeting.start_time.isoformat() if meeting.start_time else None,
                 'end_time': meeting.end_time.isoformat() if meeting.end_time else None,
                 'subject': meeting.subject,
-                'round_type': meeting.round_type.value
+                'round_type': meeting.round_type  # Already a string
             }
         
         return None
@@ -224,5 +220,3 @@ class Meeting(db.Model):
         
         session.commit()
         return meeting
-
-

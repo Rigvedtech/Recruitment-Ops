@@ -497,9 +497,11 @@ export async function updateUserProfile(updateData: {
 
 // Forgot password - send OTP
 export async function forgotPassword(email: string) {
+    const domain = getCurrentDomain();
     const response = await fetch(getApiUrl('/auth/forgot-password'), {
         method: 'POST',
         headers: {
+            'X-Original-Domain': domain,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email }),
@@ -515,9 +517,11 @@ export async function forgotPassword(email: string) {
 
 // Reset password with OTP
 export async function resetPassword(email: string, otp: string, newPassword: string) {
+    const domain = getCurrentDomain();
     const response = await fetch(getApiUrl('/auth/reset-password'), {
         method: 'POST',
         headers: {
+            'X-Original-Domain': domain,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, otp, new_password: newPassword }),
@@ -779,7 +783,20 @@ export const api = {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to update ${endpoint}`);
+            let errorMessage = `Failed to update ${endpoint}`;
+            try {
+                const errorData = await response.json();
+                if (errorData.error) {
+                    errorMessage = errorData.error;
+                } else if (errorData.message) {
+                    errorMessage = errorData.message;
+                }
+            } catch (e) {
+                // If response is not JSON, use default message
+            }
+            const error: any = new Error(errorMessage);
+            error.response = { data: { error: errorMessage }, status: response.status };
+            throw error;
         }
 
         return response.json();
@@ -940,6 +957,36 @@ export const api = {
 
         if (!response.ok) {
             throw new Error('Failed to fetch profile count');
+        }
+
+        return response.json();
+    },
+
+    // Job Posting API methods
+    getRequirementsWithPostingStatus: async () => {
+        const headers = getAuthHeaders();
+        const response = await fetch(getApiUrl('/job-posting/requirements'), {
+            method: 'GET',
+            headers,
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch requirements with posting status');
+        }
+
+        return response.json();
+    },
+
+    updateJobPostingStatus: async (requestId: string, isJobPosted: boolean = true) => {
+        const headers = getAuthHeaders();
+        const response = await fetch(getApiUrl(`/job-posting/${requestId}/status`), {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ is_job_posted: isJobPosted }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update job posting status');
         }
 
         return response.json();

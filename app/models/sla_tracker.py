@@ -1,29 +1,26 @@
+"""
+SLATracker Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from datetime import datetime, timedelta
 from app.database import db, GUID, postgresql_uuid_default
-from app.models.sla_config import StepNameEnum
 from flask import g
 import uuid
-import enum
 
-class SLAStatusEnum(enum.Enum):
-    pending = "pending"
-    completed = "completed"
-    breached = "breached"
-    cancelled = "cancelled"
 
 class SLATracker(db.Model):
     __tablename__ = 'sla_tracker'
     
     sla_tracker_id = db.Column(GUID, primary_key=True, server_default=postgresql_uuid_default())
     requirement_id = db.Column(GUID, db.ForeignKey('requirements.requirement_id'), nullable=False)
-    step_name = db.Column(db.Enum(StepNameEnum), nullable=False)
+    step_name = db.Column(db.String(30), nullable=False)  # Uses PostgreSQL enum values as strings
     step_started_at = db.Column(db.DateTime, nullable=False)
     step_completed_at = db.Column(db.DateTime, nullable=True)
     sla_hours = db.Column(db.Integer, nullable=False)
     sla_days = db.Column(db.Integer, nullable=False)
     actual_duration_hours = db.Column(db.Numeric(10, 2), nullable=True)
     actual_duration_days = db.Column(db.Numeric(10, 2), nullable=True)
-    sla_status = db.Column(db.Enum(SLAStatusEnum), nullable=True)
+    sla_status = db.Column(db.String(20), nullable=True)  # Uses PostgreSQL enum values as strings
     sla_breach_hours = db.Column(db.Numeric(10, 2), nullable=True)
     user_id = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=True)
     notes = db.Column(db.Text, nullable=True)
@@ -49,20 +46,20 @@ class SLATracker(db.Model):
             return db.session
     
     def __repr__(self):
-        return f'<SLATracker {self.requirement_id}:{self.step_name.value if self.step_name else None} - {self.sla_status.value if self.sla_status else None}>'
+        return f'<SLATracker {self.requirement_id}:{self.step_name} - {self.sla_status}>'
     
     def to_dict(self):
         return {
             'sla_tracker_id': str(self.sla_tracker_id) if self.sla_tracker_id else None,
             'requirement_id': str(self.requirement_id) if self.requirement_id else None,
-            'step_name': self.step_name.value if self.step_name else None,
+            'step_name': self.step_name,  # Already a string
             'step_started_at': self.step_started_at.isoformat() if self.step_started_at else None,
             'step_completed_at': self.step_completed_at.isoformat() if self.step_completed_at else None,
             'sla_hours': self.sla_hours,
             'sla_days': self.sla_days,
             'actual_duration_hours': float(self.actual_duration_hours) if self.actual_duration_hours else None,
             'actual_duration_days': float(self.actual_duration_days) if self.actual_duration_days else None,
-            'sla_status': self.sla_status.value if self.sla_status else None,
+            'sla_status': self.sla_status,  # Already a string
             'sla_breach_hours': float(self.sla_breach_hours) if self.sla_breach_hours else None,
             'user_id': str(self.user_id) if self.user_id else None,
             'notes': self.notes,
@@ -91,18 +88,18 @@ class SLATracker(db.Model):
         if self.step_completed_at:
             # Step is completed, check if it was on time
             if self.actual_duration_hours <= self.sla_hours:
-                self.sla_status = SLAStatusEnum.completed
+                self.sla_status = 'completed'  # String value from PostgreSQL enum
                 self.sla_breach_hours = 0
             else:
-                self.sla_status = SLAStatusEnum.breached
+                self.sla_status = 'breached'  # String value from PostgreSQL enum
                 self.sla_breach_hours = self.actual_duration_hours - self.sla_hours
         else:
             # Step is still in progress, check if it's currently breaching
             if self.actual_duration_hours > self.sla_hours:
-                self.sla_status = SLAStatusEnum.breached
+                self.sla_status = 'breached'  # String value from PostgreSQL enum
                 self.sla_breach_hours = self.actual_duration_hours - self.sla_hours
             else:
-                self.sla_status = SLAStatusEnum.pending
+                self.sla_status = 'pending'  # String value from PostgreSQL enum
                 self.sla_breach_hours = 0  # No breach yet
     
     def complete_step(self, completion_time: datetime = None):
@@ -129,15 +126,15 @@ class SLATracker(db.Model):
         return remaining
     
     @classmethod
-    def start_step(cls, requirement_id: str, step_name: StepNameEnum, 
+    def start_step(cls, requirement_id: str, step_name: str, 
                    sla_hours: int, sla_days: int, user_id: str = None, 
                    notes: str = None):
-        """Start tracking a new step"""
+        """Start tracking a new step (accepts string step_name)"""
         # Check if step is already being tracked
         session = cls.get_db_session()
         existing = session.query(cls).filter_by(
             requirement_id=requirement_id, 
-            step_name=step_name.value,
+            step_name=step_name,
             step_completed_at=None
         ).first()
         
@@ -146,13 +143,13 @@ class SLATracker(db.Model):
         
         tracker = cls(
             requirement_id=requirement_id,
-            step_name=step_name,
+            step_name=step_name,  # String value directly
             step_started_at=datetime.utcnow(),
             sla_hours=sla_hours,
             sla_days=sla_days,
             user_id=user_id,
             notes=notes,
-            sla_status=SLAStatusEnum.pending
+            sla_status='pending'  # String value from PostgreSQL enum
         )
         
         session.add(tracker)
@@ -160,12 +157,12 @@ class SLATracker(db.Model):
         return tracker
     
     @classmethod
-    def complete_step(cls, requirement_id: str, step_name: StepNameEnum, completion_time: datetime = None):
-        """Complete a step and calculate SLA metrics"""
+    def complete_step_by_name(cls, requirement_id: str, step_name: str, completion_time: datetime = None):
+        """Complete a step and calculate SLA metrics (accepts string step_name)"""
         session = cls.get_db_session()
         tracker = session.query(cls).filter_by(
             requirement_id=requirement_id,
-            step_name=step_name.value,
+            step_name=step_name,
             step_completed_at=None
         ).first()
         
@@ -225,8 +222,8 @@ class SLATracker(db.Model):
         return len(in_progress_steps)
     
     @classmethod
-    def get_sla_metrics(cls, requirement_id: str = None, step_name: StepNameEnum = None):
-        """Get SLA metrics for analysis"""
+    def get_sla_metrics(cls, requirement_id: str = None, step_name: str = None):
+        """Get SLA metrics for analysis (accepts string step_name)"""
         session = cls.get_db_session()
         query = session.query(cls)
         
@@ -234,7 +231,7 @@ class SLATracker(db.Model):
             query = query.filter_by(requirement_id=requirement_id)
         
         if step_name:
-            query = query.filter_by(step_name=step_name.value)
+            query = query.filter_by(step_name=step_name)
         
         completed_steps = query.filter(cls.step_completed_at.isnot(None)).all()
         
@@ -250,8 +247,8 @@ class SLATracker(db.Model):
             }
         
         total_steps = len(completed_steps)
-        on_time_steps = len([s for s in completed_steps if s.sla_status == SLAStatusEnum.completed])
-        breached_steps = len([s for s in completed_steps if s.sla_status == SLAStatusEnum.breached])
+        on_time_steps = len([s for s in completed_steps if s.sla_status == 'completed'])
+        breached_steps = len([s for s in completed_steps if s.sla_status == 'breached'])
         
         total_duration_hours = sum(s.actual_duration_hours or 0 for s in completed_steps)
         total_breach_hours = sum(s.sla_breach_hours or 0 for s in completed_steps)

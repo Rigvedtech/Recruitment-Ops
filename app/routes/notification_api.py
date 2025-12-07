@@ -198,7 +198,7 @@ def cleanup_expired_notifications():
             return jsonify({'error': 'User not found'}), 404
 
         actual_user_id, user_role = result
-        if user_role.value != 'admin':
+        if user_role != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
         
         count = NotificationService.cleanup_expired_notifications()
@@ -233,7 +233,7 @@ def create_test_notification():
         
         # Validate admin user - only fetch user_id, role and username
         admin_result = get_db_session().query(User.user_id, User.role, User.username).filter_by(user_id=admin_user_id).first()
-        if not admin_result or admin_result[1].value != 'admin':
+        if not admin_result or admin_result[1] != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
         
         admin_actual_id, admin_role, admin_username = admin_result
@@ -281,7 +281,7 @@ def trigger_sla_notifications():
             return jsonify({'error': 'User not found'}), 404
 
         actual_user_id, user_role = result
-        if user_role.value != 'admin':
+        if user_role != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
         
         # Get SLA alerts and create notifications
@@ -315,7 +315,7 @@ def get_all_notifications_admin():
             return jsonify({'error': 'User not found'}), 404
 
         actual_user_id, user_role = result
-        if user_role.value != 'admin':
+        if user_role != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
         
         # Get query parameters
@@ -339,7 +339,7 @@ def get_all_notifications_admin():
                     'user': {
                         'id': user_info.user_id,
                         'username': user_info.username,
-                        'role': user_info.role.value if user_info.role else None
+                        'role': user_info.role if user_info.role else None
                     },
                     'notifications': [],
                     'unread_count': 0

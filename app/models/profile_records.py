@@ -1,12 +1,11 @@
+"""
+ProfileRecords Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from datetime import datetime
 from app.database import db, GUID, postgresql_uuid_default
 import uuid
-import enum
 
-class ProfileStatusEnum(enum.Enum):
-    onboarded = "onboarded"
-    rejected = "rejected"
-    selected = "selected"
 
 class ProfileRecords(db.Model):
     __tablename__ = 'profile_records'
@@ -14,7 +13,7 @@ class ProfileRecords(db.Model):
     profile_record_id = db.Column(GUID, primary_key=True, server_default=postgresql_uuid_default())
     profile_id = db.Column(GUID, db.ForeignKey('profiles.profile_id'), nullable=False)
     requirement_id = db.Column(GUID, db.ForeignKey('requirements.requirement_id'), nullable=False)
-    status = db.Column(db.Enum(ProfileStatusEnum), nullable=False)
+    status = db.Column(db.String(20), nullable=False)  # Uses PostgreSQL enum values as strings
     remark = db.Column(db.Text, nullable=True)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
@@ -34,7 +33,7 @@ class ProfileRecords(db.Model):
             'profile_record_id': str(self.profile_record_id) if self.profile_record_id else None,
             'profile_id': str(self.profile_id) if self.profile_id else None,
             'requirement_id': str(self.requirement_id) if self.requirement_id else None,
-            'status': self.status.value if self.status else None,
+            'status': self.status,  # Already a string
             'remark': self.remark,
             'is_deleted': self.is_deleted,
             'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None,

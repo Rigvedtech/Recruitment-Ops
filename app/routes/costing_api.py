@@ -1,9 +1,10 @@
 from flask import Blueprint, jsonify, request, current_app, g
 from app.database import db
 from app.models.source_cost_template import SourceCostTemplate
-from app.models.profile import Profile, SourceEnum
-from app.models.user import User, UserRoleEnum
+from app.models.profile import Profile
+from app.models.user import User
 from app.middleware.domain_auth import require_domain_auth
+from app.utils.enum_utils import EnumRegistry
 from sqlalchemy import func, and_
 from datetime import datetime
 from decimal import Decimal
@@ -50,7 +51,7 @@ def get_source_templates():
     try:
         # Check admin role
         current_user = getattr(request, 'current_user', None)
-        if not current_user or getattr(getattr(current_user, 'role', None), 'value', None) != 'admin':
+        if not current_user or getattr(current_user, 'role', None) != 'admin':
             return jsonify({
                 'success': False,
                 'message': 'Admin access required'
@@ -59,9 +60,10 @@ def get_source_templates():
         session = get_db_session()
         templates = session.query(SourceCostTemplate).all()
         
-        # If no templates exist, create default ones
+        # If no templates exist, create default ones using source values from PostgreSQL
         if not templates:
-            for source in SourceEnum:
+            source_values = EnumRegistry.get_enum_values('source')
+            for source in source_values:
                 template = SourceCostTemplate(
                     source=source,
                     cost=0.0
@@ -89,7 +91,7 @@ def update_source_templates():
     try:
         # Check admin role
         current_user = getattr(request, 'current_user', None)
-        if not current_user or getattr(getattr(current_user, 'role', None), 'value', None) != 'admin':
+        if not current_user or getattr(current_user, 'role', None) != 'admin':
             return jsonify({
                 'success': False,
                 'message': 'Admin access required'
@@ -111,14 +113,13 @@ def update_source_templates():
             source_value = template_data.get('source')
             cost = template_data.get('cost', 0.0)
             
-            # Convert string to enum
-            try:
-                source_enum = SourceEnum[source_value] if isinstance(source_value, str) else source_value
-            except KeyError:
-                source_enum = SourceEnum(source_value)
+            # Validate source value against PostgreSQL enum
+            if not EnumRegistry.is_valid_enum_value('source', source_value):
+                current_app.logger.warning(f"Invalid source value: {source_value}")
+                continue
             
-            # Find or create template
-            template = session.query(SourceCostTemplate).filter_by(source=source_enum).first()
+            # Find or create template using string value
+            template = session.query(SourceCostTemplate).filter_by(source=source_value).first()
             
             if template:
                 template.cost = cost
@@ -126,7 +127,7 @@ def update_source_templates():
                 template.updated_at = datetime.utcnow()
             else:
                 template = SourceCostTemplate(
-                    source=source_enum,
+                    source=source_value,
                     cost=cost,
                     updated_by=user_id
                 )
@@ -154,7 +155,7 @@ def get_recruiters():
     try:
         # Check admin role
         current_user = getattr(request, 'current_user', None)
-        if not current_user or getattr(getattr(current_user, 'role', None), 'value', None) != 'admin':
+        if not current_user or getattr(current_user, 'role', None) != 'admin':
             return jsonify({
                 'success': False,
                 'message': 'Admin access required'
@@ -163,7 +164,7 @@ def get_recruiters():
         session = get_db_session()
         recruiters = session.query(User).filter(
             and_(
-                User.role == UserRoleEnum.recruiter,
+                User.role == 'recruiter',
                 User.is_deleted == False
             )
         ).all()
@@ -192,7 +193,7 @@ def calculate_per_unit():
     try:
         # Check admin role
         current_user = getattr(request, 'current_user', None)
-        if not current_user or getattr(getattr(current_user, 'role', None), 'value', None) != 'admin':
+        if not current_user or getattr(current_user, 'role', None) != 'admin':
             return jsonify({
                 'success': False,
                 'message': 'Admin access required'
@@ -265,7 +266,7 @@ def calculate_monthly():
     try:
         # Check admin role
         current_user = getattr(request, 'current_user', None)
-        if not current_user or getattr(getattr(current_user, 'role', None), 'value', None) != 'admin':
+        if not current_user or getattr(current_user, 'role', None) != 'admin':
             return jsonify({
                 'success': False,
                 'message': 'Admin access required'
@@ -336,7 +337,7 @@ def get_profile_count():
     try:
         # Check admin role
         current_user = getattr(request, 'current_user', None)
-        if not current_user or getattr(getattr(current_user, 'role', None), 'value', None) != 'admin':
+        if not current_user or getattr(current_user, 'role', None) != 'admin':
             return jsonify({
                 'success': False,
                 'message': 'Admin access required'

@@ -1,9 +1,13 @@
+"""
+Requirement Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from datetime import datetime
 from app.database import db, GUID, postgresql_uuid_default
 import uuid
-import enum
 from sqlalchemy import event, text, String
 from sqlalchemy.dialects.postgresql import ENUM
+
 
 def format_enum_for_display(value):
     """Convert database enum values to user-friendly display format"""
@@ -12,73 +16,41 @@ def format_enum_for_display(value):
     # Replace underscores with spaces and title case each word
     return value.replace('_', ' ').title()
 
-class RequirementStatusEnum(enum.Enum):
-    Open = "Open"
-    Candidate_Submission = "Candidate_Submission"
-    Interview_Scheduled = "Interview_Scheduled"
-    Offer_Recommendation = "Offer_Recommendation"
-    On_Boarding = "On_Boarding"
-    On_Hold = "On_Hold"
-    Closed = "Closed"
-    Cancelled = "Cancelled"
 
-class DepartmentEnum(enum.Enum):
-    Engineering = "Engineering"
-    Human_Resources = "Human_Resources"
-    Finance = "Finance"
-    Marketing = "Marketing"
-    Sales = "Sales"
-    Operations = "Operations"
-    Information_Technology = "Information_Technology"
-    Customer_Support = "Customer_Support"
-    Product_Management = "Product_Management"
-    Quality_Assurance = "Quality_Assurance"
-    Business_Development = "Business_Development"
-    Legal = "Legal"
-    Administration = "Administration"
-    Technical = "Technical"
+# PostgreSQL ENUM types - these reference existing DB enum types
+# create_type=False because they already exist in the database
+RequirementStatusType = ENUM(
+    'Open', 'Candidate_Submission', 'Interview_Scheduled', 
+    'Offer_Recommendation', 'On_Boarding', 'On_Hold', 'Closed', 'Cancelled',
+    name='requirementstatusenum',
+    create_type=False
+)
 
-class CompanyEnum(enum.Enum):
-    Tech_Corp = "Tech_Corp"
-    Infosys = "Infosys"
-    TCS = "TCS"
-    Wipro = "Wipro"
-    Accenture = "Accenture"
-    Cognizant = "Cognizant"
-    Capgemini = "Capgemini"
-    IBM = "IBM"
-    Microsoft = "Microsoft"
-    Google = "Google"
-    Amazon = "Amazon"
-    Oracle = "Oracle"
-    SAP = "SAP"
-    Deloitte = "Deloitte"
-    PwC = "PwC"
-    KPMG = "KPMG"
-    EY = "EY"
-    McKinsey = "McKinsey"
-    BCG = "BCG"
-    Bain = "Bain"
-    BOSCH = "BOSCH"
+DepartmentType = ENUM(
+    name='departmentenum',
+    create_type=False
+)
 
-class ShiftEnum(enum.Enum):
-    Day = "Day"
-    Night = "Night"
-    rotational = "rotational"
-    flexible = "flexible"
+CompanyType = ENUM(
+    name='companyenum', 
+    create_type=False
+)
 
-class JobTypeEnum(enum.Enum):
-    full_time = "full_time"
-    part_time = "part_time"
-    contract = "contract"
-    internship = "internship"
-    freelance = "freelance"
+ShiftType = ENUM(
+    name='shiftenum',
+    create_type=False
+)
 
-class PriorityEnum(enum.Enum):
-    high = "high"
-    medium = "medium"
-    low = "low"
-    urgent = "urgent"
+JobTypeType = ENUM(
+    name='jobtypeenum',
+    create_type=False
+)
+
+PriorityType = ENUM(
+    name='priorityenum',
+    create_type=False
+)
+
 
 class Requirement(db.Model):
     __tablename__ = 'requirements'
@@ -86,24 +58,24 @@ class Requirement(db.Model):
     requirement_id = db.Column(GUID, primary_key=True, server_default=postgresql_uuid_default())
     request_id = db.Column(db.String(10), unique=True, index=True, nullable=False)
     job_title = db.Column(db.String(255), nullable=True)
-    department = db.Column(db.String(50), nullable=True)
+    department = db.Column(db.String(50), nullable=True)  # Stores PostgreSQL enum values as strings
     location = db.Column(db.String(150), nullable=True)
-    company_name = db.Column(db.String(50), nullable=True)
-    shift = db.Column(db.String(20), nullable=True)
-    job_type = db.Column(db.String(20), nullable=True)
+    company_name = db.Column(db.String(50), nullable=True)  # Stores PostgreSQL enum values as strings
+    shift = db.Column(db.String(20), nullable=True)  # Stores PostgreSQL enum values as strings
+    job_type = db.Column(db.String(20), nullable=True)  # Stores PostgreSQL enum values as strings
     hiring_manager = db.Column(db.String(100), nullable=True)
     experience_range = db.Column(db.String(50), nullable=True)
     skill_id = db.Column(GUID, db.ForeignKey('skills.skill_id'), nullable=True)
     minimum_qualification = db.Column(db.Text, nullable=True)
     number_of_positions = db.Column(db.Integer, nullable=True)
     budget_ctc = db.Column(db.String(50), nullable=True)
-    priority = db.Column(db.String(20), nullable=True)
+    priority = db.Column(db.String(20), nullable=True)  # Stores PostgreSQL enum values as strings
     tentative_doj = db.Column(db.Date, nullable=True)
     additional_remarks = db.Column(db.Text, nullable=True)
     job_description = db.Column(db.Text, nullable=True)  # Extracted text from JD file
     jd_path = db.Column(db.String(500), nullable=True)  # File path to uploaded JD
     job_file_name = db.Column(db.String(255), nullable=True)  # Original filename of JD
-    status = db.Column(db.Enum(RequirementStatusEnum), default=RequirementStatusEnum.Open, nullable=False)
+    status = db.Column(db.String(50), default='Open', nullable=False)  # Uses PostgreSQL enum values as strings
     user_id = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     closed_at = db.Column(db.DateTime, nullable=True)
@@ -111,6 +83,9 @@ class Requirement(db.Model):
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
     deleted_by = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=True)
+    # Job posting tracking fields
+    is_job_posted = db.Column(db.Boolean, default=False, nullable=False)
+    job_posted_at = db.Column(db.DateTime, nullable=True)
     created_by = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=True)
     updated_by = db.Column(GUID, db.ForeignKey('users.user_id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -132,7 +107,7 @@ class Requirement(db.Model):
     
     def close_requirement(self):
         """Close the requirement and set closed_at timestamp"""
-        self.status = RequirementStatusEnum.Closed
+        self.status = 'Closed'  # String value from PostgreSQL enum
         self.closed_at = datetime.utcnow()
         self.updated_at = datetime.utcnow()
     
@@ -203,28 +178,29 @@ class Requirement(db.Model):
         return assignment is not None
     
     def to_dict(self):
+        """Convert to dictionary - all enum values returned as raw strings for frontend dropdown matching"""
         return {
             'requirement_id': str(self.requirement_id) if self.requirement_id else None,
             'request_id': self.request_id,
             'job_title': self.job_title,
-            'department': format_enum_for_display(self.department),
+            'department': self.department,  # Raw value for dropdown matching
             'location': self.location,
-            'company_name': format_enum_for_display(self.company_name),
-            'shift': format_enum_for_display(self.shift),
-            'job_type': format_enum_for_display(self.job_type),
+            'company_name': self.company_name,  # Raw value for dropdown matching
+            'shift': self.shift,  # Raw value for dropdown matching
+            'job_type': self.job_type,  # Raw value for dropdown matching
             'hiring_manager': self.hiring_manager,
             'experience_range': self.experience_range,
             'skill_id': str(self.skill_id) if self.skill_id else None,
             'minimum_qualification': self.minimum_qualification,
             'number_of_positions': self.number_of_positions,
             'budget_ctc': self.budget_ctc,
-            'priority': format_enum_for_display(self.priority),
+            'priority': self.priority,  # Raw value for dropdown matching
             'tentative_doj': self.tentative_doj.isoformat() if self.tentative_doj else None,
             'additional_remarks': self.additional_remarks,
             'job_description': self.job_description,
             'jd_path': self.jd_path,
             'job_file_name': self.job_file_name,
-            'status': self.status.value if self.status else None,
+            'status': self.status,  # Already a string
             'user_id': str(self.user_id) if self.user_id else None,
             'notes': self.notes,
             'closed_at': self.closed_at.isoformat() if self.closed_at else None,
@@ -236,8 +212,11 @@ class Requirement(db.Model):
             'created_by': str(self.created_by) if self.created_by else None,
             'updated_by': str(self.updated_by) if self.updated_by else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_job_posted': self.is_job_posted,
+            'job_posted_at': self.job_posted_at.isoformat() if self.job_posted_at else None
         } 
+
 
 # Auto-generate a unique request_id like "Req010" before insert
 @event.listens_for(Requirement, 'before_insert')

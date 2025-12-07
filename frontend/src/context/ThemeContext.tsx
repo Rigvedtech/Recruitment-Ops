@@ -13,24 +13,31 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>('light');
+  const [mounted, setMounted] = useState(false);
 
+  // Load theme from localStorage on mount
   useEffect(() => {
-    const stored = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
-    const prefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const initial: Theme = stored === 'dark' || (!stored && prefersDark) ? 'dark' : 'light';
+    const stored = localStorage.getItem('theme') as Theme | null;
+    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+    const initial: Theme = stored || (prefersDark ? 'dark' : 'light');
     setTheme(initial);
+    setMounted(true);
   }, []);
 
+  // Apply theme to document when it changes
   useEffect(() => {
-    if (typeof document !== 'undefined') {
-      const root = document.documentElement;
-      if (theme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
-      localStorage.setItem('theme', theme);
-    }
-  }, [theme]);
+    if (!mounted) return;
+    
+    const root = document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+    localStorage.setItem('theme', theme);
+  }, [theme, mounted]);
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 
+  // Always provide the context - use current theme value
+  // The mounted check only affects DOM manipulation, not the provider
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       {children}

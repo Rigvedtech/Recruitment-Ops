@@ -1,11 +1,16 @@
 /**
  * Utility functions for formatting status names
+ * 
+ * NOTE: All status/enum values come from PostgreSQL enums via the API.
+ * No hardcoded enum values - PostgreSQL is the single source of truth.
+ * Use the /api/get-enum-values endpoint to fetch valid values dynamically.
  */
 
 /**
- * Format status name for display (convert underscores to spaces)
- * @param status - The status string with underscores
- * @returns Formatted status string with spaces
+ * Format enum/status name for display (convert underscores to spaces)
+ * This works with any PostgreSQL enum value format
+ * @param status - The status/enum string with underscores
+ * @returns Formatted string with spaces and proper capitalization
  */
 export const formatStatusForDisplay = (status: string): string => {
   if (!status) return '';
@@ -20,7 +25,7 @@ export const formatStatusForDisplay = (status: string): string => {
 /**
  * Format status name for API calls (convert spaces to underscores)
  * @param status - The status string with spaces
- * @returns Formatted status string with underscores
+ * @returns Formatted status string with underscores (matching DB format)
  */
 export const formatStatusForAPI = (status: string): string => {
   if (!status) return '';
@@ -30,22 +35,19 @@ export const formatStatusForAPI = (status: string): string => {
 };
 
 /**
- * Status mapping for common values
+ * Get display name for status
+ * Uses dynamic formatting - no hardcoded mapping needed
+ * All enum values come from PostgreSQL and are formatted consistently
  */
-export const STATUS_DISPLAY_MAP: Record<string, string> = {
-  'Interview_Scheduled': 'Interview Scheduled',
-  'Candidate_Submission': 'Candidate Submission', 
-  'Offer_Recommendation': 'Offer Recommendation',
-  'On_Boarding': 'On Boarding',
-  'On_Hold': 'On Hold',
-  'Open': 'Open',
-  'Closed': 'Closed',
-  'Cancelled': 'Cancelled'
+export const getStatusDisplayName = (status: string): string => {
+  return formatStatusForDisplay(status);
 };
 
 /**
- * Get display name for status using predefined mapping or fallback to formatter
+ * @deprecated Use getStatusDisplayName() instead
+ * This map is kept for backward compatibility but should not be extended.
+ * PostgreSQL enums are the single source of truth for valid values.
  */
-export const getStatusDisplayName = (status: string): string => {
-  return STATUS_DISPLAY_MAP[status] || formatStatusForDisplay(status);
+export const STATUS_DISPLAY_MAP: Record<string, string> = {
+  // This is dynamically generated at runtime - no need to maintain hardcoded list
 };

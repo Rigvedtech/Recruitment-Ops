@@ -2827,12 +2827,10 @@ class EmailProcessor:
         """Update requirement status to 'Interview Scheduled' if email contains interview scheduled content"""
         try:
             if self._is_interview_scheduled_email(email_data):
-                # Use enum-safe comparison and assignment
-                from app.models.requirement import RequirementStatusEnum
-                current_status_value = getattr(requirement.status, 'value', str(requirement.status))
-                if current_status_value in [RequirementStatusEnum.Open.value, RequirementStatusEnum.Candidate_Submission.value]:
+                # Status is now a string - PostgreSQL enum as source of truth
+                if requirement.status in ['Open', 'Candidate_Submission']:
                     old_status = requirement.status
-                    requirement.status = RequirementStatusEnum.Interview_Scheduled
+                    requirement.status = 'Interview_Scheduled'
                     requirement.updated_at = datetime.utcnow()
                     current_app.logger.info(f"Updated requirement {requirement.request_id} status from '{old_status}' to 'Interview Scheduled' based on email content")
                     return True
@@ -2845,12 +2843,10 @@ class EmailProcessor:
         """Update requirement status to 'Offer Recommendation' if email contains offer recommendation content"""
         try:
             if self._is_offer_recommendation_email(email_data):
-                # Use enum-safe comparison and assignment
-                from app.models.requirement import RequirementStatusEnum
-                current_status_value = getattr(requirement.status, 'value', str(requirement.status))
-                if current_status_value in [RequirementStatusEnum.Open.value, RequirementStatusEnum.Candidate_Submission.value]:
+                # Status is now a string - PostgreSQL enum as source of truth
+                if requirement.status in ['Open', 'Candidate_Submission']:
                     old_status = requirement.status
-                    requirement.status = RequirementStatusEnum.Offer_Recommendation
+                    requirement.status = 'Offer_Recommendation'
                     requirement.updated_at = datetime.utcnow()
                     current_app.logger.info(f"Updated requirement {requirement.request_id} status from '{old_status}' to 'Offer Recommendation' based on email content")
                     return True

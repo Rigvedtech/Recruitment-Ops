@@ -1,16 +1,17 @@
+"""
+SystemSettings Model - Uses PostgreSQL ENUMs as the ONLY source of truth.
+No hardcoded Python enum classes - all enum values come from the database.
+"""
 from datetime import datetime
 from app.database import db, GUID, postgresql_uuid_default
 import uuid
-import enum
 
-class SettingKeyEnum(enum.Enum):
-    last_email_refresh = "last_email_refresh"
 
 class SystemSettings(db.Model):
     __tablename__ = 'system_settings'
     
     system_setting_id = db.Column(GUID, primary_key=True, server_default=postgresql_uuid_default())
-    setting_key = db.Column(db.Enum(SettingKeyEnum), unique=True, nullable=False)
+    setting_key = db.Column(db.String(50), unique=True, nullable=False)  # Uses PostgreSQL enum values as strings
     setting_value = db.Column(db.Text, nullable=True)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
@@ -28,7 +29,7 @@ class SystemSettings(db.Model):
     def to_dict(self):
         return {
             'system_setting_id': str(self.system_setting_id) if self.system_setting_id else None,
-            'setting_key': self.setting_key.value if self.setting_key else None,
+            'setting_key': self.setting_key,  # Already a string
             'setting_value': self.setting_value,
             'is_deleted': self.is_deleted,
             'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None,
@@ -40,14 +41,14 @@ class SystemSettings(db.Model):
         }
     
     @classmethod
-    def get_setting(cls, key: SettingKeyEnum) -> str:
-        """Get a setting value by key"""
+    def get_setting(cls, key: str) -> str:
+        """Get a setting value by key (accepts string key)"""
         setting = cls.query.filter_by(setting_key=key).first()
         return setting.setting_value if setting else None
     
     @classmethod
-    def set_setting(cls, key: SettingKeyEnum, value: str):
-        """Set a setting value by key (upsert)"""
+    def set_setting(cls, key: str, value: str):
+        """Set a setting value by key (upsert, accepts string key)"""
         setting = cls.query.filter_by(setting_key=key).first()
         if setting:
             setting.setting_value = value
@@ -57,4 +58,4 @@ class SystemSettings(db.Model):
             db.session.add(setting)
         
         db.session.commit()
-        return setting 
+        return setting

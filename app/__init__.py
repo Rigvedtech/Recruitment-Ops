@@ -5,6 +5,7 @@ from flask_migrate import Migrate
 from flask_apscheduler import APScheduler
 from flask_jwt_extended import JWTManager
 from app.routes.api import api_bp
+from app.routes.login_api import login_api_bp
 from app.routes.main import main_bp
 from app.routes.tracker_api import tracker_bp
 from app.routes.sla_api import sla_bp
@@ -15,6 +16,8 @@ from app.routes.domain_resolver_api import domain_resolver_api_bp
 from app.routes.domain_test_api import domain_test_bp
 from app.routes.redis_health_api import redis_health_bp
 from app.routes.costing_api import costing_bp
+from app.routes.job_posting_api import job_posting_bp
+from app.routes.enum_api import enum_bp
 from app.database import init_db, db
 from app.services.sla_service import SLAService
 from app.middleware.domain_db_resolver import domain_db_resolver
@@ -105,6 +108,7 @@ def create_app(config_name='default'):
 
     # Register blueprints
     app.register_blueprint(main_bp)  # Register main routes first
+    app.register_blueprint(login_api_bp)  # Register login/auth routes
     app.register_blueprint(api_bp)   # Then register API routes
     app.register_blueprint(tracker_bp)  # Register tracker routes
     app.register_blueprint(sla_bp)   # Register SLA routes
@@ -115,6 +119,8 @@ def create_app(config_name='default'):
     app.register_blueprint(domain_test_bp)  # Register domain test API routes
     app.register_blueprint(redis_health_bp)  # Register Redis health API routes
     app.register_blueprint(costing_bp)  # Register costing API routes
+    app.register_blueprint(job_posting_bp)  # Register job posting API routes
+    app.register_blueprint(enum_bp)  # Register enum API routes
 
     # Configure and start APScheduler
     app.config['SCHEDULER_API_ENABLED'] = False  # Disable built-in API routes to avoid conflicts
@@ -301,6 +307,7 @@ def create_app_for_job():
 
     # Register blueprints
     app.register_blueprint(main_bp)  # Register main routes first
+    app.register_blueprint(login_api_bp)  # Register login/auth routes
     app.register_blueprint(api_bp)   # Then register API routes
     app.register_blueprint(tracker_bp)  # Register tracker routes
     app.register_blueprint(sla_bp)   # Register SLA routes

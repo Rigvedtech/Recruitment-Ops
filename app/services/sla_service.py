@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from app.models.sla_config import SLAConfig, StepNameEnum
-from app.models.sla_tracker import SLATracker, SLAStatusEnum
+from app.models.sla_config import SLAConfig
+from app.models.sla_tracker import SLATracker
 from app.models.requirement import Requirement
 from app.database import db
 from flask import current_app
@@ -20,8 +20,8 @@ class SLAService:
             raise
     
     @staticmethod
-    def get_sla_config(step_name: StepNameEnum) -> Optional[SLAConfig]:
-        """Get SLA configuration for a specific step"""
+    def get_sla_config(step_name: str) -> Optional[SLAConfig]:
+        """Get SLA configuration for a specific step (accepts string step_name)"""
         return SLAConfig.get_config_by_step(step_name)
     
     @staticmethod
@@ -32,12 +32,12 @@ class SLAService:
         return SLAConfig.get_active_configs()
     
     @staticmethod
-    def update_sla_config(step_name: StepNameEnum, sla_hours: int, sla_days: int, 
+    def update_sla_config(step_name: str, sla_hours: int, sla_days: int, 
                          description: str = None) -> SLAConfig:
-        """Update SLA configuration for a step"""
+        """Update SLA configuration for a step (accepts string step_name)"""
         config = SLAConfig.get_config_by_step(step_name)
         if not config:
-            raise ValueError(f"SLA configuration not found for step: {step_name.value}")
+            raise ValueError(f"SLA configuration not found for step: {step_name}")
         
         config.sla_hours = sla_hours
         config.sla_days = sla_days
@@ -46,17 +46,17 @@ class SLAService:
         config.updated_at = datetime.utcnow()
         
         db.session.commit()
-        current_app.logger.info(f"Updated SLA config for {step_name.value}: {sla_hours}h")
+        current_app.logger.info(f"Updated SLA config for {step_name}: {sla_hours}h")
         return config
     
     @staticmethod
-    def start_workflow_step(requirement_id: str, step_name: StepNameEnum, 
+    def start_workflow_step(requirement_id: str, step_name: str, 
                            user_id: str = None, notes: str = None) -> SLATracker:
-        """Start tracking a workflow step"""
+        """Start tracking a workflow step (accepts string step_name)"""
         # Get SLA configuration
         config = SLAConfig.get_config_by_step(step_name)
         if not config:
-            raise ValueError(f"No SLA configuration found for step: {step_name.value}")
+            raise ValueError(f"No SLA configuration found for step: {step_name}")
         
         # Start tracking
         tracker = SLATracker.start_step(
@@ -68,17 +68,17 @@ class SLAService:
             notes=notes
         )
         
-        current_app.logger.info(f"Started SLA tracking for {requirement_id}:{step_name.value}")
+        current_app.logger.info(f"Started SLA tracking for {requirement_id}:{step_name}")
         return tracker
     
     @staticmethod
-    def complete_workflow_step(requirement_id: str, step_name: StepNameEnum, 
+    def complete_workflow_step(requirement_id: str, step_name: str, 
                               completion_time: datetime = None) -> Optional[SLATracker]:
-        """Complete a workflow step and calculate SLA metrics"""
-        tracker = SLATracker.complete_step(requirement_id, step_name, completion_time)
+        """Complete a workflow step and calculate SLA metrics (accepts string step_name)"""
+        tracker = SLATracker.complete_step_by_name(requirement_id, step_name, completion_time)
         
         if tracker:
-            current_app.logger.info(f"Completed SLA tracking for {requirement_id}:{step_name.value} - Status: {tracker.sla_status}")
+            current_app.logger.info(f"Completed SLA tracking for {requirement_id}:{step_name} - Status: {tracker.sla_status}")
         
         return tracker
     
@@ -95,8 +95,8 @@ class SLAService:
         active_count = len(active_steps)
         breaching_count = len([s for s in active_steps if s.is_breaching()])
         
-        # Calculate compliance percentage
-        completed_on_time = len([s for s in completed_steps if s.sla_status == SLAStatusEnum.completed])
+        # Calculate compliance percentage (using string comparison)
+        completed_on_time = len([s for s in completed_steps if s.sla_status == 'completed'])
         compliance_percentage = (completed_on_time / completed_count * 100) if completed_count > 0 else 0
         
         # Calculate average TAT
@@ -159,10 +159,10 @@ class SLAService:
         
         # Calculate metrics
         total_steps = len(all_steps)
-        on_time_steps = len([s for s in all_steps if s.sla_status == SLAStatusEnum.completed])
-        breached_steps = len([s for s in all_steps if s.sla_status == SLAStatusEnum.breached])
+        on_time_steps = len([s for s in all_steps if s.sla_status == 'completed'])
+        breached_steps = len([s for s in all_steps if s.sla_status == 'breached'])
         in_progress_count = len(in_progress_steps)
-        real_time_breached = len([s for s in in_progress_steps if s.sla_status == SLAStatusEnum.breached])
+        real_time_breached = len([s for s in in_progress_steps if s.sla_status == 'breached'])
         
         # Only completed steps contribute to duration calculations
         total_duration_hours = sum(s.actual_duration_hours or 0 for s in completed_steps)
@@ -171,10 +171,10 @@ class SLAService:
         # Calculate step-wise metrics (completed + in-progress)
         step_metrics = {}
         for step in all_steps:
-            step_name = step.step_name.value if step.step_name else str(step.step_name)
+            step_name = step.step_name
             if step_name not in step_metrics:
                 step_metrics[step_name] = {
-                    'step_display_name': step.step_name.value if step.step_name else str(step.step_name),
+                    'step_display_name': step.step_name,
                     'total_steps': 0,
                     'on_time_steps': 0,
                     'breached_steps': 0,
@@ -192,9 +192,9 @@ class SLAService:
             else:
                 step_metrics[step_name]['in_progress_steps'] += 1
             
-            if step.sla_status == SLAStatusEnum.completed:
+            if step.sla_status == 'completed':
                 step_metrics[step_name]['on_time_steps'] += 1
-            elif step.sla_status == SLAStatusEnum.breached:
+            elif step.sla_status == 'breached':
                 step_metrics[step_name]['breached_steps'] += 1
         
         # Calculate percentages and averages for each step
@@ -213,8 +213,8 @@ class SLAService:
         for step in breaching_steps:
             breaching_requests.append({
                 'requirement_id': step.requirement_id,
-                'step_name': step.step_name.value if step.step_name else str(step.step_name),
-                'step_display_name': step.step_name.value if step.step_name else str(step.step_name),
+                'step_name': step.step_name,
+                'step_display_name': step.step_name,
                 'breach_hours': step.sla_breach_hours,
                 'user_id': step.user_id,
                 'started_at': step.step_started_at.isoformat()
@@ -266,18 +266,18 @@ class SLAService:
         
         # Calculate metrics
         total_steps = len(recruiter_steps)
-        on_time_steps = len([s for s in recruiter_steps if s.sla_status == SLAStatusEnum.completed])
-        breached_steps = len([s for s in recruiter_steps if s.sla_status == SLAStatusEnum.breached])
+        on_time_steps = len([s for s in recruiter_steps if s.sla_status == 'completed'])
+        breached_steps = len([s for s in recruiter_steps if s.sla_status == 'breached'])
         
         total_duration_hours = sum(s.actual_duration_hours or 0 for s in recruiter_steps)
         
         # Calculate step-wise metrics
         step_metrics = {}
         for step in recruiter_steps:
-            step_name = step.step_name.value if step.step_name else str(step.step_name)
+            step_name = step.step_name
             if step_name not in step_metrics:
                 step_metrics[step_name] = {
-                    'step_display_name': step.step_name.value if step.step_name else str(step.step_name),
+                    'step_display_name': step.step_name,
                     'total_steps': 0,
                     'on_time_steps': 0,
                     'breached_steps': 0,
@@ -289,9 +289,9 @@ class SLAService:
             step_metrics[step_name]['total_steps'] += 1
             step_metrics[step_name]['total_duration_hours'] += step.actual_duration_hours or 0
             
-            if step.sla_status == SLAStatusEnum.completed:
+            if step.sla_status == 'completed':
                 step_metrics[step_name]['on_time_steps'] += 1
-            elif step.sla_status == SLAStatusEnum.breached:
+            elif step.sla_status == 'breached':
                 step_metrics[step_name]['breached_steps'] += 1
         
         # Calculate percentages and averages
@@ -341,8 +341,8 @@ class SLAService:
                 'requirement_id': step.requirement_id,
                 'job_title': requirement.job_title if requirement else None,
                 'company_name': requirement.company_name if requirement and requirement.company_name else None,
-                'step_name': step.step_name.value if step.step_name else str(step.step_name),
-                'step_display_name': step.step_name.value if step.step_name else str(step.step_name),
+                'step_name': step.step_name,
+                'step_display_name': step.step_name,
                 'user_id': step.user_id,
                 'breach_hours': breach_hours,
                 'breach_days': breach_days_rounded,
@@ -371,12 +371,13 @@ class SLAService:
         started_trackers = []
         
         # Map status to workflow steps
+        # Mapping status to step names (using string values from PostgreSQL enums)
         status_to_steps = {
-            'Open': [StepNameEnum.open],  # Track 'open' step when requirement is in Open status
-            'Candidate_Submission': [StepNameEnum.candidate_submission],
-            'Interview_Scheduled': [StepNameEnum.interview_round_1],
-            'Offer_Recommendation': [StepNameEnum.offered],
-            'On_Boarding': [StepNameEnum.onboarding]
+            'Open': ['open'],  # Track 'open' step when requirement is in Open status
+            'Candidate_Submission': ['candidate_submission'],
+            'Interview_Scheduled': ['interview_round_1'],
+            'Offer_Recommendation': ['offered'],
+            'On_Boarding': ['onboarding']
         }
         
         steps_to_start = status_to_steps.get(current_status, [])
@@ -390,6 +391,6 @@ class SLAService:
                 )
                 started_trackers.append(tracker)
             except Exception as e:
-                current_app.logger.error(f"Error starting SLA tracking for {requirement_id}:{step_name.value}: {str(e)}")
+                current_app.logger.error(f"Error starting SLA tracking for {requirement_id}:{step_name}: {str(e)}")
         
         return started_trackers

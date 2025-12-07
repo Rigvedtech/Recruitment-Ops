@@ -1,9 +1,10 @@
 from flask import Blueprint, jsonify, request, current_app, g
 from app.services.sla_service import SLAService
-from app.models.sla_config import SLAConfig, StepNameEnum
+from app.models.sla_config import SLAConfig
 from app.models.sla_tracker import SLATracker
 from app.models.requirement import Requirement
 from app.database import db
+from app.utils.enum_utils import EnumRegistry
 from datetime import datetime, timedelta
 import traceback
 from app.middleware.domain_auth import require_domain_auth
@@ -69,13 +70,11 @@ def get_sla_configs():
 def get_sla_config(step_name):
     """Get SLA configuration for a specific step"""
     try:
-        # Convert string to enum
-        try:
-            step_enum = StepNameEnum(step_name)
-        except ValueError:
+        # Validate step name against DB enum values
+        if not EnumRegistry.is_valid('step_name', step_name):
             return jsonify({'error': f'Invalid step name: {step_name}'}), 400
         
-        config = SLAService.get_sla_config(step_enum)
+        config = SLAService.get_sla_config(step_name)
         if not config:
             return jsonify({'error': f'SLA configuration not found for step: {step_name}'}), 404
         
@@ -89,10 +88,8 @@ def get_sla_config(step_name):
 def update_sla_config(step_name):
     """Update SLA configuration for a step"""
     try:
-        # Convert string to enum
-        try:
-            step_enum = StepNameEnum(step_name)
-        except ValueError:
+        # Validate step name against DB enum values
+        if not EnumRegistry.is_valid('step_name', step_name):
             return jsonify({'error': f'Invalid step name: {step_name}'}), 400
         
         data = request.get_json()
@@ -106,7 +103,7 @@ def update_sla_config(step_name):
         if sla_hours is None or sla_days is None:
             return jsonify({'error': 'sla_hours and sla_days are required'}), 400
         
-        config = SLAService.update_sla_config(step_enum, sla_hours, sla_days, description)
+        config = SLAService.update_sla_config(step_name, sla_hours, sla_days, description)
         return jsonify(config.to_dict())
     except ValueError as e:
         return jsonify({'error': str(e)}), 404
@@ -142,15 +139,13 @@ def start_sla_tracking():
         if not requirement_id or not step_name:
             return jsonify({'error': 'requirement_id and step_name are required'}), 400
         
-        # Convert string to enum
-        try:
-            step_enum = StepNameEnum(step_name)
-        except ValueError:
+        # Validate step name against DB enum values
+        if not EnumRegistry.is_valid('step_name', step_name):
             return jsonify({'error': f'Invalid step name: {step_name}'}), 400
         
         tracker = SLAService.start_workflow_step(
             requirement_id=requirement_id,
-            step_name=step_enum,
+            step_name=step_name,
             user_id=user_id,
             notes=notes
         )
@@ -177,10 +172,8 @@ def complete_sla_tracking():
         if not requirement_id or not step_name:
             return jsonify({'error': 'requirement_id and step_name are required'}), 400
         
-        # Convert string to enum
-        try:
-            step_enum = StepNameEnum(step_name)
-        except ValueError:
+        # Validate step name against DB enum values
+        if not EnumRegistry.is_valid('step_name', step_name):
             return jsonify({'error': f'Invalid step name: {step_name}'}), 400
         
         # Parse completion time if provided
@@ -193,7 +186,7 @@ def complete_sla_tracking():
         
         tracker = SLAService.complete_workflow_step(
             requirement_id=requirement_id,
-            step_name=step_enum,
+            step_name=step_name,
             completion_time=parsed_completion_time
         )
         
@@ -246,7 +239,7 @@ def auto_start_workflow_steps(requirement_id):
         
         started_trackers = SLAService.auto_start_workflow_steps(
             requirement_id=str(requirement.requirement_id),
-            current_status=requirement.status.value if requirement.status else 'Open',
+            current_status=requirement.status if requirement.status else 'Open',
             user_id=str(user_id) if user_id else None
         )
         
@@ -272,7 +265,7 @@ def auto_start_workflow_steps_by_request(request_id):
         
         started_trackers = SLAService.auto_start_workflow_steps(
             requirement_id=str(requirement.requirement_id),
-            current_status=requirement.status.value if requirement.status else 'Open',
+            current_status=requirement.status if requirement.status else 'Open',
             user_id=str(user_id) if user_id else None
         )
         
@@ -290,13 +283,13 @@ def auto_start_workflow_steps_by_request(request_id):
 def backfill_open_steps():
     """Backfill missing 'open' step trackers for existing requirements with 'Open' status"""
     try:
-        from app.models.requirement import Requirement, RequirementStatusEnum
-        from app.models.sla_tracker import SLATracker, SLAStatusEnum
-        from app.models.sla_config import StepNameEnum, SLAConfig
+        from app.models.requirement import Requirement
+        from app.models.sla_tracker import SLATracker
+        from app.models.sla_config import SLAConfig
         
         # Get all requirements with 'Open' status that don't have an 'open' step tracker
         open_requirements = get_db_session().query(Requirement).filter(
-            Requirement.status == RequirementStatusEnum.Open,
+            Requirement.status == 'Open',
             Requirement.deleted_at.is_(None)
         ).all()
         
@@ -309,7 +302,7 @@ def backfill_open_steps():
                 # Check if 'open' step tracker already exists
                 existing_tracker = get_db_session().query(SLATracker).filter_by(
                     requirement_id=requirement.requirement_id,
-                    step_name=StepNameEnum.open.value,
+                    step_name='open',
                     step_completed_at=None
                 ).first()
                 
@@ -318,7 +311,7 @@ def backfill_open_steps():
                     continue
                 
                 # Get SLA config for 'open' step
-                config = SLAConfig.get_config_by_step(StepNameEnum.open)
+                config = SLAConfig.get_config_by_step('open')
                 if not config:
                     current_app.logger.warning(f"No SLA config found for 'open' step, skipping requirement {requirement.requirement_id}")
                     errors.append(f"Requirement {requirement.request_id}: No SLA config for 'open' step")
@@ -327,12 +320,12 @@ def backfill_open_steps():
                 # Create 'open' step tracker with requirement's created_at as start time
                 tracker = SLATracker(
                     requirement_id=requirement.requirement_id,
-                    step_name=StepNameEnum.open,
+                    step_name='open',
                     step_started_at=requirement.created_at or datetime.utcnow(),
                     sla_hours=config.sla_hours,
                     sla_days=config.sla_days,
                     user_id=requirement.user_id,
-                    sla_status=SLAStatusEnum.pending
+                    sla_status='pending'
                 )
                 
                 # Calculate initial metrics
@@ -492,8 +485,8 @@ def get_breaching_requests():
             
             breaching_requests.append({
                 'requirement_id': step.requirement_id,
-                'step_name': step.step_name.value if step.step_name else str(step.step_name),
-                'step_display_name': step.step_name.value if step.step_name else str(step.step_name),
+                'step_name': step.step_name,
+                'step_display_name': step.step_name,
                 'breach_hours': breach_hours,
                 'breach_days': breach_days_rounded,
                 'breach_time_display': breach_time_display,
@@ -503,7 +496,7 @@ def get_breaching_requests():
                 'requirement': {
                     'job_title': requirement.job_title if requirement else None,
                     'company_name': requirement.company_name if requirement and requirement.company_name else None,
-                    'status': requirement.status.value if requirement and requirement.status else None
+                    'status': requirement.status if requirement and requirement.status else None
                 }
             })
         

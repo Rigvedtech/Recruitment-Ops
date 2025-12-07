@@ -3,9 +3,9 @@ from app.services.email_processor import EmailProcessor
 from app.services.export_handler import ExportHandler
 from app.services.recruiter_notification_service import RecruiterNotificationService
 from app.scheduler import get_scheduler_status, pause_scheduler, resume_scheduler, run_job_manually
-from app.models.requirement import Requirement, DepartmentEnum, CompanyEnum, ShiftEnum, JobTypeEnum, PriorityEnum
+from app.models.requirement import Requirement, format_enum_for_display
 from app.models.profile import Profile
-from app.models.user import User, UserRoleEnum
+from app.models.user import User
 # Legacy Tracker model - deprecated, use Profile.requirement_id relationship instead
 # from app.models.tracker import Tracker
 from app.database import db
@@ -17,7 +17,7 @@ from app.middleware.redis_performance_middleware import cache_response, cache_da
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 import os
 from datetime import datetime, timedelta
-from sqlalchemy.orm import scoped_session
+from sqlalchemy.orm import scoped_session, joinedload, selectinload
 from sqlalchemy import func, and_, or_
 import re
 import logging
@@ -94,7 +94,7 @@ def _get_assigned_recruiters_for_requirement(requirement_id):
         for assignment in assignments:
             # Get only username and role from the same session
             result = session.query(User.username, User.role).filter_by(user_id=assignment.user_id).first()
-            if result and result[1].value == 'recruiter':
+            if result and result[1] == 'recruiter':
                 recruiters.append(result[0])
         
         return recruiters
@@ -823,38 +823,53 @@ def export_data():
 @require_domain_auth
 @cache_response(ttl=300)  # Cache for 5 minutes
 def get_requirements():
-    """Get all job requirements (excluding reply/forward emails)"""
+    """Get all job requirements (excluding reply/forward emails) - OPTIMIZED VERSION"""
     try:
-        current_app.logger.info("Fetching all requirements")
-        # Get manual requirements (these should always be included regardless of email subject)
-        manual_requirements = get_db_session().query(Requirement).filter(
+        from app.models.assignment import Assignment
+        
+        current_app.logger.info("Fetching manual requirements only")
+        session = get_db_session()
+        
+        # OPTIMIZATION 1: Eager load email_details to avoid N+1 queries
+        # Get manual requirements only (exclude automatic/email-derived ones and deleted requirements)
+        requirements = session.query(Requirement).options(
+            selectinload(Requirement.email_details)
+        ).filter(
             Requirement.requirement_id.isnot(None),
-            Requirement.is_manual_requirement == True
+            Requirement.is_manual_requirement == True,
+            Requirement.is_deleted == False
         ).order_by(Requirement.created_at.desc()).all()
         
-        # Get automatic requirements (email-based) with existing filters
-        # Join with EmailDetails to filter by email subject prefixes
-        from app.models.email_details import EmailDetails
-        automatic_requirements = (
-            get_db_session().query(Requirement).join(
-                EmailDetails, Requirement.requirement_id == EmailDetails.requirement_id
-            )
-            .filter(
-                Requirement.requirement_id.isnot(None),
-                Requirement.is_manual_requirement == False,
-                ~EmailDetails.email_subject.like('Re:%'),
-                ~EmailDetails.email_subject.like('Fw:%'),
-                ~EmailDetails.email_subject.like('Fwd:%'),
-                ~EmailDetails.email_subject.like('Forward:%')
-            )
-            .order_by(Requirement.created_at.desc())
-            .all()
-        )
+        if not requirements:
+            return jsonify([])
         
-        # Combine both sets
-        requirements = manual_requirements + automatic_requirements
+        # OPTIMIZATION 2: Batch load all unique user_ids in one query
+        user_ids = {r.user_id for r in requirements if r.user_id}
+        users_dict = {}
+        if user_ids:
+            users = session.query(User).filter(User.user_id.in_(user_ids)).all()
+            users_dict = {str(user.user_id): user.username for user in users}
         
-        current_app.logger.info(f"Found {len(manual_requirements)} manual requirements and {len(automatic_requirements)} automatic requirements")
+        # OPTIMIZATION 3: Batch load all assignments with users in one query using JOIN
+        requirement_ids = [r.requirement_id for r in requirements]
+        assignments_data = session.query(
+            Assignment.requirement_id,
+            User.username
+        ).join(
+            User, Assignment.user_id == User.user_id
+        ).filter(
+            Assignment.requirement_id.in_(requirement_ids),
+            Assignment.is_active == True,
+            User.role == 'recruiter'
+        ).all()
+        
+        # Create lookup dictionary: requirement_id -> list of recruiter usernames
+        recruiters_dict = {}
+        for req_id, username in assignments_data:
+            req_id_str = str(req_id)
+            if req_id_str not in recruiters_dict:
+                recruiters_dict[req_id_str] = []
+            recruiters_dict[req_id_str].append(username)
         
         # Helper to get latest related EmailDetails fields (subject, email_id)
         def _latest_email_fields(req):
@@ -873,6 +888,9 @@ def get_requirements():
         result = []
         for r in requirements:
             email_subject, email_id = _latest_email_fields(r)
+            req_id_str = str(r.requirement_id)
+            user_id_str = str(r.user_id) if r.user_id else None
+            
             result.append({
                 'id': r.requirement_id,
                 'request_id': r.request_id,
@@ -892,15 +910,16 @@ def get_requirements():
                 'priority': format_enum_for_display(r.priority),
                 'tentative_doj': r.tentative_doj.isoformat() if r.tentative_doj else None,
                 'additional_remarks': r.additional_remarks,
-                'assigned_to': get_db_session().query(User.username).filter_by(user_id=r.user_id).scalar() if r.user_id else None,
-                'assigned_recruiters': _get_assigned_recruiters_for_requirement(r.requirement_id),
+                'assigned_to': users_dict.get(user_id_str) if user_id_str else None,
+                'assigned_recruiters': recruiters_dict.get(req_id_str, []),
                 'is_manual_requirement': r.is_manual_requirement,
+                'is_deleted': r.is_deleted,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
                 'updated_at': r.updated_at.isoformat() if r.updated_at else None,
                 'email_id': email_id
             })
         
-        current_app.logger.info("Successfully converted requirements to JSON")
+        current_app.logger.info(f"Successfully converted {len(result)} requirements to JSON")
         return jsonify(result)
     except Exception as e:
         current_app.logger.error(f"Error fetching requirements data: {str(e)}")
@@ -1056,8 +1075,7 @@ def create_requirement():
         # Initialize SLA tracking for the 'open' step
         try:
             from app.services.sla_service import SLAService
-            from app.models.requirement import RequirementStatusEnum
-            current_status = new_requirement.status.value if new_requirement.status else 'Open'
+            current_status = new_requirement.status if new_requirement.status else 'Open'
             user_id = str(new_requirement.user_id) if new_requirement.user_id else None
             started_trackers = SLAService.auto_start_workflow_steps(
                 requirement_id=str(new_requirement.requirement_id),
@@ -1119,8 +1137,7 @@ def force_create_requirement():
         # Initialize SLA tracking for the 'open' step
         try:
             from app.services.sla_service import SLAService
-            from app.models.requirement import RequirementStatusEnum
-            current_status = new_requirement.status.value if new_requirement.status else 'Open'
+            current_status = new_requirement.status if new_requirement.status else 'Open'
             user_id = str(new_requirement.user_id) if new_requirement.user_id else None
             started_trackers = SLAService.auto_start_workflow_steps(
                 requirement_id=str(new_requirement.requirement_id),
@@ -1734,724 +1751,16 @@ def upload_profiles():
         current_app.logger.error(f"Error uploading profiles: {str(e)}")
         return jsonify({'success': False, 'error': f'Failed to upload profiles: {str(e)}'}), 500
 
-# Unified Authentication Endpoints
-@api_bp.route('/login', methods=['POST'])
-def login():
-    """Unified login for both admin and recruiter users with domain isolation"""
-    try:
-        current_app.logger.info("Login endpoint called")
-        data = request.get_json()
-        current_app.logger.info(f"Received data: {data}")
-        
-        username = data.get('username')
-        password = data.get('password')
-        
-        current_app.logger.info(f"Username: {username}, Password: {password}")
-        
-        if not username or not password:
-            current_app.logger.warning("Missing username or password")
-            return jsonify({
-                'status': 'error',
-                'message': 'Username and password are required'
-            }), 400
-        
-        # Get domain from custom header or fallback to detection
-        domain = request.headers.get('X-Original-Domain')
-        if not domain:
-            domain = request.headers.get('X-Domain')
-        
-        # Ensure domain database isolation before authentication
-        if not ensure_domain_isolation():
-            current_app.logger.error(f"Failed to ensure domain database isolation for domain: {domain}")
-            return jsonify({
-                'status': 'error',
-                'message': 'Database not available for this domain'
-            }), 503
-        
-        # Get domain-specific database session
-        from flask import g
-        if not hasattr(g, 'db_session') or g.db_session is None:
-            current_app.logger.error("No database session available for domain")
-            return jsonify({
-                'status': 'error',
-                'message': 'Database session not available for this domain'
-            }), 503
-        
-        # Find user by username in domain-specific database
-        user = g.db_session.query(User).filter_by(username=username).first()
-        current_app.logger.info(f"User found: {user}")
-        
-        if not user:
-            current_app.logger.warning(f"No user found with username: {username}")
-            return jsonify({
-                'status': 'error',
-                'message': 'Invalid username or password'
-            }), 401
-        
-        # Check password using the new hashing method
-        if not user.check_password(password):
-            current_app.logger.warning(f"Password mismatch for user: {username}")
-            return jsonify({
-                'status': 'error',
-                'message': 'Invalid username or password'
-            }), 401
-        
-        # Create JWT token with additional claims for stateless validation
-        # This allows JWT validation without database queries
-        access_token = create_access_token(
-            identity=username,
-            additional_claims={
-                'domain': domain,
-                'role': user.role.value if hasattr(user.role, 'value') else user.role,
-                'user_id': str(user.user_id) if user.user_id else None,
-                'email': user.email,
-                'full_name': user.full_name
-            }
-        )
-        
-        current_app.logger.info(f"Login successful for user: {username}")
-        return jsonify({
-            'status': 'success',
-            'message': 'Login successful',
-            'access_token': access_token,
-            'user': user.to_dict()
-        })
-        
-    except Exception as e:
-        current_app.logger.error(f"Error in login: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to login'
-        }), 500
-
-@api_bp.route('/signup', methods=['POST'])
-def signup():
-    """Unified signup for both admin and recruiter users with domain isolation"""
-    try:
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
-        email = data.get('email')
-        full_name = data.get('full_name')
-        phone_number = data.get('phone_number')
-        role = data.get('role', 'recruiter')  # Default to recruiter if not specified
-        
-        if not username or not password or not full_name or not email:
-            return jsonify({
-                'status': 'error',
-                'message': 'username, password, full_name, and email are required'
-            }), 400
-        
-        # Validate role
-        if role not in ['admin', 'recruiter']:
-            return jsonify({
-                'status': 'error',
-                'message': 'Invalid role. Must be either "admin" or "recruiter"'
-            }), 400
-        
-        # Validate phone number (optional but if present must be 10 digits)
-        if phone_number is not None:
-            phone_str = str(phone_number)
-            if not phone_str.isdigit() or len(phone_str) != 10:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'phone_number must be a 10-digit number'
-                }), 400
-        
-        # Get domain from custom header or fallback to detection
-        domain = request.headers.get('X-Original-Domain')
-        if not domain:
-            domain = request.headers.get('X-Domain')
-        
-        # Ensure domain database isolation before user creation
-        if not ensure_domain_isolation():
-            current_app.logger.error(f"Failed to ensure domain database isolation for domain: {domain}")
-            return jsonify({
-                'status': 'error',
-                'message': 'Database not available for this domain'
-            }), 503
-        
-        # Get domain-specific database session
-        from flask import g
-        if not hasattr(g, 'db_session') or g.db_session is None:
-            current_app.logger.error("No database session available for domain")
-            return jsonify({
-                'status': 'error',
-                'message': 'Database session not available for this domain'
-            }), 503
-        
-        # Check if username already exists in domain-specific database
-        existing_user = g.db_session.query(User).filter_by(username=username).first()
-        if existing_user:
-            return jsonify({
-                'status': 'error',
-                'message': 'Username already exists'
-            }), 409
-        
-        # Check if email already exists in domain-specific database (excluding temporary users)
-        existing_email = g.db_session.query(User).filter(User.email == email, User.username.notlike('temp_%')).first()
-        if existing_email:
-            return jsonify({
-                'status': 'error',
-                'message': 'Email already exists'
-            }), 409
-        
-        # Check if there's a temporary user with this email in domain-specific database (indicating OTP verification)
-        temp_user = g.db_session.query(User).filter(User.email == email, User.username.like('temp_%')).first()
-        if not temp_user:
-            # Check if there's already a permanent user with this email in domain-specific database
-            permanent_user = g.db_session.query(User).filter(User.email == email, User.username.notlike('temp_%')).first()
-            if permanent_user:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'An account with this email already exists. Please try logging in instead.'
-                }), 409
-            else:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Please verify your email address first by sending and verifying an OTP'
-                }), 400
-        
-        # Update the temporary user with the actual user data
-        from app.models.user import UserRoleEnum
-        role_value = UserRoleEnum.admin if role == 'admin' else UserRoleEnum.recruiter
-        
-        # Update the temporary user with the real user data
-        temp_user.username = username
-        temp_user.full_name = full_name
-        temp_user.role = role_value
-        temp_user.otp = None  # Clear OTP
-        temp_user.otp_expiry_time = None  # Clear OTP expiry
-        
-        if phone_number is not None:
-            # store as numeric field; SQLAlchemy Numeric accepts str or int
-            temp_user.phone_number = int(phone_number)
-        
-        # Set the new password
-        temp_user.set_password(password)
-        
-        # Commit the changes using domain-specific database session
-        g.db_session.commit()
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'{role.capitalize()} account created successfully',
-            'user': temp_user.to_dict()
-        }), 201
-        
-    except Exception as e:
-        current_app.logger.error(f"Error in signup: {str(e)}")
-        if hasattr(g, 'db_session') and g.db_session is not None:
-            g.db_session.rollback()
-        
-        # Check if it's a unique constraint violation
-        if 'UniqueViolation' in str(e) or 'duplicate key' in str(e):
-            if 'email' in str(e):
-                return jsonify({
-                    'status': 'error',
-                    'message': 'An account with this email already exists. Please try logging in instead.'
-                }), 409
-            elif 'username' in str(e):
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Username already exists. Please choose a different username.'
-                }), 409
-        
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to create account'
-        }), 500
-
-@api_bp.route('/auth/current-user', methods=['GET'])
-@require_jwt_domain_auth
-def get_current_user():
-    """Get current authenticated user information with JWT and domain isolation"""
-    try:
-        # User is already authenticated and available in request context
-        user = getattr(request, 'current_user', None)
-        if user:
-            return jsonify({
-                'status': 'success',
-                'user': user.to_dict()
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': 'User not found'
-            }), 404
-            
-    except Exception as e:
-        current_app.logger.error(f"Error getting current user: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to get current user'
-        }), 500
-
-@api_bp.route('/auth/current-user', methods=['PUT'])
-@require_jwt_domain_auth
-def update_current_user():
-    """Update current authenticated user profile with JWT and domain isolation"""
-    try:
-        # Get user info from JWT (SimpleNamespace)
-        jwt_user = getattr(request, 'current_user', None)
-        if not jwt_user:
-            return jsonify({
-                'status': 'error',
-                'message': 'User not found'
-            }), 404
-        
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'status': 'error',
-                'message': 'No data provided'
-            }), 400
-        
-        # Get domain-specific database session
-        from flask import g
-        if not hasattr(g, 'db_session') or g.db_session is None:
-            current_app.logger.error("No database session available for domain")
-            return jsonify({
-                'status': 'error',
-                'message': 'Database session not available for this domain'
-            }), 503
-        
-        session = g.db_session
-        
-        # Fetch actual User model instance from database (needed for check_password and set_password methods)
-        user = session.query(User).filter_by(user_id=jwt_user.user_id).first()
-        if not user:
-            return jsonify({
-                'status': 'error',
-                'message': 'User not found in database'
-            }), 404
-        
-        updated = False
-        
-        # Update full_name if provided
-        if 'full_name' in data and data['full_name']:
-            user.full_name = data['full_name']
-            updated = True
-        
-        # Update username if provided
-        if 'username' in data and data['username']:
-            new_username = data['username'].strip()
-            if new_username != user.username:
-                # Check if username already exists
-                existing_user = session.query(User).filter(
-                    User.username == new_username,
-                    User.user_id != user.user_id
-                ).first()
-                if existing_user:
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Username already exists'
-                    }), 409
-                user.username = new_username
-                updated = True
-        
-        # Update phone_number if provided
-        if 'phone_number' in data:
-            phone_number = data['phone_number']
-            if phone_number is not None and phone_number != '':
-                phone_str = str(phone_number).strip()
-                # Validate phone number format (10 digits)
-                if not phone_str.isdigit() or len(phone_str) != 10:
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Phone number must be a 10-digit number'
-                    }), 400
-                # Check if phone number already exists
-                existing_user = session.query(User).filter(
-                    User.phone_number == int(phone_str),
-                    User.user_id != user.user_id
-                ).first()
-                if existing_user:
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Phone number already exists'
-                    }), 409
-                user.phone_number = int(phone_str)
-            else:
-                user.phone_number = None
-            updated = True
-        
-        # Update password if provided
-        if 'password' in data and data['password']:
-            new_password = data['password']
-            current_password = data.get('current_password')
-            
-            # Require current password for password change
-            if not current_password:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Current password is required to change password'
-                }), 400
-            
-            # Verify current password
-            if not user.check_password(current_password):
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Current password is incorrect'
-                }), 401
-            
-            # Validate new password length
-            if len(new_password) < 6:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Password must be at least 6 characters long'
-                }), 400
-            
-            # Set new password (will be hashed)
-            user.set_password(new_password)
-            updated = True
-        
-        if updated:
-            # Update updated_at timestamp
-            user.updated_at = datetime.utcnow()
-            session.commit()
-            current_app.logger.info(f"User profile updated: {user.username}")
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Profile updated successfully',
-            'user': user.to_dict()
-        }), 200
-            
-    except Exception as e:
-        current_app.logger.error(f"Error updating current user: {str(e)}")
-        if hasattr(g, 'db_session') and g.db_session is not None:
-            g.db_session.rollback()
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to update profile'
-        }), 500
-
-@api_bp.route('/auth/send-otp', methods=['POST'])
-def send_otp():
-    """Send OTP to email for verification"""
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        
-        if not email:
-            return jsonify({
-                'status': 'error',
-                'message': 'Email is required'
-            }), 400
-        
-        # Check if email already exists
-        existing_user = get_db_session().query(User).filter_by(email=email).first()
-        if existing_user:
-            return jsonify({
-                'status': 'error',
-                'message': 'Email already exists'
-            }), 409
-        
-        # Generate 6-digit OTP
-        import random
-        otp = random.randint(100000, 999999)
-        
-        # Store OTP in database (we'll create a temporary record or use a separate OTP table)
-        # For now, we'll store it in a temporary way
-        from datetime import datetime, timedelta
-        otp_expiry = datetime.utcnow() + timedelta(minutes=10)  # OTP expires in 10 minutes
-        
-        # For simplicity, we'll create a temporary user record with OTP
-        # In production, you might want to use a separate OTP table
-        temp_user = User(
-            username=f"temp_{email}_{datetime.utcnow().timestamp()}",
-            full_name="Temporary User",
-            email=email,
-            password="temp_password",  # This will be replaced when user completes signup
-            otp=otp,
-            otp_expiry_time=otp_expiry
-        )
-        temp_user.set_password("temp_password")
-        
-        get_db_session().add(temp_user)
-        get_db_session().commit()
-        
-        # Send OTP via email
-        try:
-            from app.services.email_service import EmailService
-            email_service = EmailService()
-            
-            subject = "Email Verification OTP"
-            html_content = f"""
-            <html>
-            <body>
-                <h2>Email Verification</h2>
-                <p>Your verification code is: <strong>{otp}</strong></p>
-                <p>This code will expire in 10 minutes.</p>
-                <p>If you did not request this code, please ignore this email.</p>
-            </body>
-            </html>
-            """
-            
-            email_sent = email_service.send_email(email, subject, html_content)
-            
-            if email_sent:
-                return jsonify({
-                    'status': 'success',
-                    'message': 'OTP sent successfully'
-                }), 200
-            else:
-                # If email sending fails, clean up the temp user
-                get_db_session().delete(temp_user)
-                get_db_session().commit()
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Failed to send OTP email'
-                }), 500
-                
-        except Exception as e:
-            # If email sending fails, clean up the temp user
-            get_db_session().delete(temp_user)
-            get_db_session().commit()
-            current_app.logger.error(f"Error sending OTP email: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'message': 'Failed to send OTP email'
-            }), 500
-        
-    except Exception as e:
-        current_app.logger.error(f"Error in send_otp: {str(e)}")
-        get_db_session().rollback()
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to send OTP'
-        }), 500
-
-@api_bp.route('/auth/verify-otp', methods=['POST'])
-def verify_otp():
-    """Verify OTP for email verification"""
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        otp = data.get('otp')
-        
-        if not email or not otp:
-            return jsonify({
-                'status': 'error',
-                'message': 'Email and OTP are required'
-            }), 400
-        
-        # Find the temporary user with the email and OTP
-        temp_user = get_db_session().query(User).filter_by(email=email, otp=otp).first()
-        
-        if not temp_user:
-            return jsonify({
-                'status': 'error',
-                'message': 'Invalid OTP'
-            }), 400
-        
-        # Check if OTP has expired
-        from datetime import datetime
-        if temp_user.otp_expiry_time and temp_user.otp_expiry_time < datetime.utcnow():
-            get_db_session().delete(temp_user)
-            get_db_session().commit()
-            return jsonify({
-                'status': 'error',
-                'message': 'OTP has expired'
-            }), 400
-        
-        # OTP is valid, we can mark it as verified
-        # In a real implementation, you might want to store this verification status
-        # For now, we'll just return success
-        return jsonify({
-            'status': 'success',
-            'message': 'OTP verified successfully'
-        }), 200
-        
-    except Exception as e:
-        current_app.logger.error(f"Error in verify_otp: {str(e)}")
-        get_db_session().rollback()
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to verify OTP'
-        }), 500
-
-@api_bp.route('/auth/forgot-password', methods=['POST'])
-def forgot_password():
-    """Send OTP to email for password reset"""
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        
-        if not email:
-            return jsonify({
-                'status': 'error',
-                'message': 'Email is required'
-            }), 400
-        
-        # Get domain-specific database session
-        from flask import g
-        if not hasattr(g, 'db_session') or g.db_session is None:
-            # Try to ensure domain isolation
-            if not ensure_domain_isolation():
-                current_app.logger.error("Failed to ensure domain database isolation")
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Database not available for this domain'
-                }), 503
-            session = g.db_session
-        else:
-            session = g.db_session
-        
-        # Check if user exists with this email
-        user = session.query(User).filter_by(email=email).first()
-        if not user:
-            # Don't reveal if email exists or not for security
-            return jsonify({
-                'status': 'success',
-                'message': 'If the email exists, an OTP has been sent'
-            }), 200
-        
-        # Generate 6-digit OTP
-        import random
-        otp = random.randint(100000, 999999)
-        
-        # Store OTP in user record
-        from datetime import datetime, timedelta
-        otp_expiry = datetime.utcnow() + timedelta(minutes=10)  # OTP expires in 10 minutes
-        
-        user.otp = otp
-        user.otp_expiry_time = otp_expiry
-        session.commit()
-        
-        # Send OTP via email
-        try:
-            from app.services.email_service import EmailService
-            email_service = EmailService()
-            
-            subject = "Password Reset OTP"
-            html_content = f"""
-            <html>
-            <body>
-                <h2>Password Reset Request</h2>
-                <p>You have requested to reset your password.</p>
-                <p>Your verification code is: <strong>{otp}</strong></p>
-                <p>This code will expire in 10 minutes.</p>
-                <p>If you did not request this code, please ignore this email.</p>
-            </body>
-            </html>
-            """
-            
-            email_sent = email_service.send_email(email, subject, html_content)
-            
-            if email_sent:
-                return jsonify({
-                    'status': 'success',
-                    'message': 'If the email exists, an OTP has been sent'
-                }), 200
-            else:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Failed to send OTP email'
-                }), 500
-                
-        except Exception as e:
-            current_app.logger.error(f"Error sending password reset OTP email: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'message': 'Failed to send OTP email'
-            }), 500
-        
-    except Exception as e:
-        current_app.logger.error(f"Error in forgot_password: {str(e)}")
-        if hasattr(g, 'db_session') and g.db_session is not None:
-            g.db_session.rollback()
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to process password reset request'
-        }), 500
-
-@api_bp.route('/auth/reset-password', methods=['POST'])
-def reset_password():
-    """Reset password using OTP"""
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        otp = data.get('otp')
-        new_password = data.get('new_password')
-        
-        if not email or not otp or not new_password:
-            return jsonify({
-                'status': 'error',
-                'message': 'Email, OTP, and new password are required'
-            }), 400
-        
-        # Validate new password length
-        if len(new_password) < 6:
-            return jsonify({
-                'status': 'error',
-                'message': 'Password must be at least 6 characters long'
-            }), 400
-        
-        # Get domain-specific database session
-        from flask import g
-        if not hasattr(g, 'db_session') or g.db_session is None:
-            # Try to ensure domain isolation
-            if not ensure_domain_isolation():
-                current_app.logger.error("Failed to ensure domain database isolation")
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Database not available for this domain'
-                }), 503
-            session = g.db_session
-        else:
-            session = g.db_session
-        
-        # Find user with the email and OTP
-        user = session.query(User).filter_by(email=email, otp=otp).first()
-        
-        if not user:
-            return jsonify({
-                'status': 'error',
-                'message': 'Invalid OTP or email'
-            }), 400
-        
-        # Check if OTP has expired
-        from datetime import datetime
-        if user.otp_expiry_time and user.otp_expiry_time < datetime.utcnow():
-            user.otp = None
-            user.otp_expiry_time = None
-            session.commit()
-            return jsonify({
-                'status': 'error',
-                'message': 'OTP has expired'
-            }), 400
-        
-        # Reset password
-        user.set_password(new_password)
-        user.otp = None
-        user.otp_expiry_time = None
-        session.commit()
-        
-        current_app.logger.info(f"Password reset successful for user: {user.username}")
-        return jsonify({
-            'status': 'success',
-            'message': 'Password reset successfully'
-        }), 200
-        
-    except Exception as e:
-        current_app.logger.error(f"Error in reset_password: {str(e)}")
-        if hasattr(g, 'db_session') and g.db_session is not None:
-            g.db_session.rollback()
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to reset password'
-        }), 500
+# Authentication endpoints moved to app/routes/login_api.py
 
 @api_bp.route('/users', methods=['GET'])
 @require_domain_auth
 @cache_response(ttl=600)  # Cache for 10 minutes - users don't change frequently
 def get_users():
-    """Get all users (admin only)"""
+    """Get all users (admin only) - excludes soft-deleted users"""
     try:
-        # Get all users from User table
-        users = get_db_session().query(User).all()
+        # Get all non-deleted users from User table
+        users = get_db_session().query(User).filter(User.is_deleted == False).all()
         
         users_data = []
         for user in users:
@@ -2461,7 +1770,7 @@ def get_users():
                 'full_name': user.full_name,
                 'email': user.email,
                 'phone_number': str(user.phone_number) if user.phone_number else None,
-                'role': user.role.value if user.role else None,
+                'role': user.role,
                 'created_at': user.created_at.isoformat() if user.created_at else None,
                 'updated_at': user.updated_at.isoformat() if user.updated_at else None
             }
@@ -2473,24 +1782,53 @@ def get_users():
         current_app.logger.error(f"Error fetching users: {str(e)}")
         return jsonify({'error': 'Failed to fetch users'}), 500
 
-@api_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@api_bp.route('/users/<string:user_id>', methods=['DELETE'])
+@require_domain_auth
 def delete_user(user_id):
-    """Delete a user (admin only)"""
+    """Soft delete a user (admin only) - sets is_deleted=True"""
     try:
-        user = get_db_session().query(User).filter_by(id=str(user_id)).first()
+        from datetime import datetime
+        
+        # Get current user from auth context for deleted_by tracking
+        current_user = None
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            try:
+                import jwt
+                payload = jwt.decode(token, current_app.config.get('SECRET_KEY', 'dev-secret-key'), algorithms=['HS256'])
+                current_user_id = payload.get('user_id')
+                if current_user_id:
+                    current_user = get_db_session().query(User).filter_by(user_id=current_user_id).first()
+            except:
+                pass
+        
+        user = get_db_session().query(User).filter_by(user_id=user_id).first()
         if not user:
             return jsonify({'success': False, 'message': 'User not found'}), 404
         
+        # Check if user is already deleted
+        if user.is_deleted:
+            return jsonify({'success': False, 'message': 'User is already deleted'}), 400
+        
         # Don't allow deleting the last admin
         if user.role == 'admin':
-            admin_count = get_db_session().query(User).filter_by(role='admin').count()
+            admin_count = get_db_session().query(User).filter(
+                User.role == 'admin',
+                User.is_deleted == False
+            ).count()
             if admin_count <= 1:
                 return jsonify({'success': False, 'message': 'Cannot delete the last admin user'}), 400
         
-        get_db_session().delete(user)
+        # Soft delete - set is_deleted flag and metadata
+        user.is_deleted = True
+        user.deleted_at = datetime.utcnow()
+        if current_user:
+            user.deleted_by = current_user.user_id
+        
         get_db_session().commit()
         
-        current_app.logger.info(f"Deleted user: {user.username}")
+        current_app.logger.info(f"Soft deleted user: {user.username}")
         return jsonify({'success': True, 'message': f'User {user.username} deleted successfully'})
         
     except Exception as e:
@@ -3088,77 +2426,7 @@ def view_file():
         current_app.logger.error(f"Error in view_file: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-@api_bp.route('/recruiter/login', methods=['POST'])
-def recruiter_login():
-    """Login for existing recruiter with domain isolation"""
-    try:
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
-        
-        if not username or not password:
-            return jsonify({
-                'status': 'error',
-                'message': 'Username and password are required'
-            }), 400
-        
-        # Get domain from custom header or fallback to detection
-        domain = request.headers.get('X-Original-Domain')
-        if not domain:
-            domain = request.headers.get('X-Domain')
-        
-        # Ensure domain database isolation before authentication
-        if not ensure_domain_isolation():
-            current_app.logger.error(f"Failed to ensure domain database isolation for domain: {domain}")
-            return jsonify({
-                'status': 'error',
-                'message': 'Database not available for this domain'
-            }), 503
-        
-        # Get domain-specific database session
-        from flask import g
-        if not hasattr(g, 'db_session') or g.db_session is None:
-            current_app.logger.error("No database session available for domain")
-            return jsonify({
-                'status': 'error',
-                'message': 'Database session not available for this domain'
-            }), 503
-        
-        # Find user by username in domain-specific database
-        user = g.db_session.query(User).filter_by(username=username).first()
-        
-        if not user or not user.check_password(password):
-            return jsonify({
-                'status': 'error',
-                'message': 'Invalid username or password'
-            }), 401
-        
-        # Create JWT token with additional claims for stateless validation
-        # This allows JWT validation without database queries
-        access_token = create_access_token(
-            identity=username,
-            additional_claims={
-                'domain': domain,
-                'role': user.role.value if hasattr(user.role, 'value') else user.role,
-                'user_id': str(user.user_id) if user.user_id else None,
-                'email': user.email,
-                'full_name': user.full_name
-            }
-        )
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Login successful',
-            'access_token': access_token,
-            'user': user.to_dict()
-        })
-        
-    except Exception as e:
-        current_app.logger.error(f"Error in recruiter login: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to login'
-        }), 500
+# Recruiter login endpoint moved to app/routes/login_api.py
 
 @api_bp.route('/send-email', methods=['POST'])
 def send_email():
@@ -3507,7 +2775,8 @@ def get_enum_values():
             'department': 'departmentenum', 
             'shift': 'shiftenum',
             'job_type': 'jobtypeenum',
-            'priority': 'priorityenum'
+            'priority': 'priorityenum',
+            'source': 'sourceenum'
         }
         
         if enum_type not in valid_enum_types:
@@ -3567,7 +2836,8 @@ def add_enum_value():
             'department': 'departmentenum', 
             'shift': 'shiftenum',
             'job_type': 'jobtypeenum',
-            'priority': 'priorityenum'
+            'priority': 'priorityenum',
+            'source': 'sourceenum'
         }
         
         if enum_type not in valid_enum_types:
@@ -3575,8 +2845,15 @@ def add_enum_value():
         
         db_enum_type = valid_enum_types[enum_type]
         
-        # Sanitize the new value (replace spaces with underscores and make lowercase for consistency)
-        sanitized_value = new_value.replace(' ', '_').lower()
+        # Trim the new value
+        trimmed_value = new_value.strip()
+        
+        # For company enum, save as-is; for others, sanitize (lowercase with underscores)
+        if enum_type == 'company':
+            value_to_save = trimmed_value  # Save exactly as user entered
+        else:
+            # For other enums, maintain existing behavior (lowercase with underscores)
+            value_to_save = trimmed_value.replace(' ', '_').lower()
         
         # Check if the value already exists
         check_query = text("""
@@ -3584,29 +2861,54 @@ def add_enum_value():
             FROM pg_enum 
             WHERE enumtypid = (
                 SELECT oid FROM pg_type WHERE typname = :enum_type
-            ) AND enumlabel = :enum_value
+            )
         """)
         
-        result = get_db_session().execute(check_query, {
-            'enum_type': db_enum_type,
-            'enum_value': sanitized_value
-        }).fetchone()
+        # Get all existing values and check for duplicates
+        existing_values = get_db_session().execute(check_query, {
+            'enum_type': db_enum_type
+        }).fetchall()
         
-        if result:
-            return jsonify({'error': f'Value "{new_value}" already exists in {enum_type} enum'}), 400
+        existing_labels = [row[0] for row in existing_values]
+        
+        # For company enum, do case-insensitive duplicate check
+        # For other enums, check case-insensitive match
+        if enum_type == 'company':
+            # Convert both new value and existing values to lowercase for comparison
+            new_value_lower = trimmed_value.lower()
+            existing_labels_lower = [label.lower() for label in existing_labels]
+            
+            if new_value_lower in existing_labels_lower:
+                # Find the original casing of the existing value
+                matching_idx = existing_labels_lower.index(new_value_lower)
+                existing_value = existing_labels[matching_idx]
+                return jsonify({
+                    'error': f'"{new_value}" is already present in {enum_type.replace("_", " ").title()} options as "{existing_value}"',
+                    'existing_value': existing_value
+                }), 400
+        else:
+            # For other enums, check if sanitized value already exists (case-insensitive)
+            existing_labels_lower = [label.lower() for label in existing_labels]
+            if value_to_save.lower() in existing_labels_lower:
+                matching_idx = existing_labels_lower.index(value_to_save.lower())
+                existing_value = existing_labels[matching_idx]
+                return jsonify({
+                    'error': f'"{new_value}" is already present in {enum_type.replace("_", " ").title()} options as "{existing_value}"',
+                    'existing_value': existing_value
+                }), 400
         
         # Add the new enum value
         alter_query = text(f"ALTER TYPE {db_enum_type} ADD VALUE :enum_value")
         
         try:
-            get_db_session().execute(alter_query, {'enum_value': sanitized_value})
+            get_db_session().execute(alter_query, {'enum_value': value_to_save})
             get_db_session().commit()
             
             return jsonify({
                 'success': True,
                 'message': f'Successfully added "{new_value}" to {enum_type} enum',
-                'added_value': sanitized_value,
-                'display_value': new_value  # Return the original value for display
+                'added_value': value_to_save,
+                'display_value': trimmed_value  # Return the value for display (same as added_value for company)
             })
             
         except Exception as db_error:
@@ -3640,7 +2942,7 @@ def get_recruiter_activity():
             start_date = end_date - timedelta(days=days-1)
         
         # Get all recruiters - fetch both user_id and username for attribution
-        recruiter_records = get_db_session().query(User.user_id, User.username).filter(User.role == UserRoleEnum.recruiter).all()
+        recruiter_records = get_db_session().query(User.user_id, User.username).filter(User.role == 'recruiter').all()
         recruiter_usernames = [record[1] for record in recruiter_records]
         recruiter_lookup = {str(record[0]): record[1] for record in recruiter_records if record[0] and record[1]}
         
@@ -3652,7 +2954,7 @@ def get_recruiter_activity():
             User,
             Requirement.user_id == User.user_id
         ).filter(
-            User.role == UserRoleEnum.recruiter
+            User.role == 'recruiter'
         ).all()
         
         requirement_owner_map = {
@@ -3829,28 +3131,32 @@ def get_requirements_activity():
         today = datetime.now().date()
         week_start = today - timedelta(days=today.weekday())
         
-        # Get total RFH count (all requirements with requirement_id)
+        # Get total RFH count (only active requirements, excluding deleted ones)
         total_rfh = get_db_session().query(Requirement).filter(
-            Requirement.requirement_id.isnot(None)
+            Requirement.requirement_id.isnot(None),
+            Requirement.is_deleted == False
         ).count()
         
         # Get today's active requirements (requirements that recruiters worked on today)
-        # This includes requirements where profiles were submitted today
+        # This includes requirements where profiles were submitted today (excluding deleted requirements)
         today_active_requirements = get_db_session().query(
             Requirement.requirement_id
         ).join(
             Profile, Requirement.requirement_id == Profile.requirement_id
         ).filter(
-            func.date(Profile.created_at) == today
+            func.date(Profile.created_at) == today,
+            Requirement.is_deleted == False
         ).distinct().count()
         
         # Get this week's active requirements (requirements that recruiters worked on this week)
+        # Excluding deleted requirements
         weekly_active_requirements = get_db_session().query(
             Requirement.requirement_id
         ).join(
             Profile, Requirement.requirement_id == Profile.requirement_id
         ).filter(
-            func.date(Profile.created_at) >= week_start
+            func.date(Profile.created_at) >= week_start,
+            Requirement.is_deleted == False
         ).distinct().count()
         
         return jsonify({

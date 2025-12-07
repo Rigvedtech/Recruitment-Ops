@@ -91,8 +91,8 @@ def recruitment_report():
                     Screening.profile_id.in_(profile_ids),
                     Screening.is_deleted.is_(False)
                 ).all()
-                screening_selected = sum(1 for s in screening_rows if s.status and s.status.value == 'selected')
-                screening_rejected = sum(1 for s in screening_rows if s.status and s.status.value == 'rejected')
+                screening_selected = sum(1 for s in screening_rows if s.status and s.status == 'selected')
+                screening_rejected = sum(1 for s in screening_rows if s.status and s.status == 'rejected')
 
                 # Interview schedule received after screening (meetings with interview_scheduled)
                 interview_schedule_received_screening = count_meetings_for_requirement(req.requirement_id, 'interview_scheduled')
@@ -110,7 +110,7 @@ def recruitment_report():
                 InterviewRoundOne.is_deleted.is_(False)
             ).all()
             l1_done = len(l1_rows)
-            l1_selected = sum(1 for r in l1_rows if r.status and r.status.value == 'select')
+            l1_selected = sum(1 for r in l1_rows if r.status and r.status == 'select')
             # Waiting for schedule = scheduled but no select/reject recorded yet
             l1_waiting_for_schedule = max(0, l1_meeting_received - l1_done)
 
@@ -121,7 +121,7 @@ def recruitment_report():
                 InterviewRoundTwo.is_deleted.is_(False)
             ).all()
             l2_done = len(l2_rows)
-            l2_selected = sum(1 for r in l2_rows if r.status and r.status.value == 'select')
+            l2_selected = sum(1 for r in l2_rows if r.status and r.status == 'select')
             l2_waiting_for_schedule = max(0, l2_meeting_received - l2_done)
 
             # Onboarded
@@ -225,7 +225,7 @@ def internal_tracker_report():
                 Screening.requirement_id == requirement.requirement_id,
                 Screening.is_deleted.is_(False)
             ).first()
-            resume_shortlist = "Yes" if (screening and screening.status and screening.status.value == 'selected') else "No"
+            resume_shortlist = "Yes" if (screening and screening.status and screening.status == 'selected') else "No"
 
             # Get Interview Round 1 date
             interview_round_one = session.query(InterviewRoundOne).filter(
@@ -265,16 +265,16 @@ def internal_tracker_report():
                     if meeting and meeting.start_time:
                         interview_round_2_date = meeting.start_time.strftime('%Y-%m-%d')
 
-            # Map job_type to Contract/Permanent
+            # Map job_type to Contract/Permanent (job_type is now a string)
             job_type_display = ""
             if requirement.job_type:
-                job_type_lower = requirement.job_type.lower() if isinstance(requirement.job_type, str) else requirement.job_type.value.lower() if hasattr(requirement.job_type, 'value') else ""
+                job_type_lower = requirement.job_type.lower()
                 if 'contract' in job_type_lower:
                     job_type_display = "Contract"
                 elif 'full_time' in job_type_lower or 'fulltime' in job_type_lower:
                     job_type_display = "Permanent"
                 else:
-                    job_type_display = requirement.job_type if isinstance(requirement.job_type, str) else (requirement.job_type.value if hasattr(requirement.job_type, 'value') else "")
+                    job_type_display = requirement.job_type
 
             # Format date from Requirement.created_at
             requirement_date = requirement.created_at.strftime('%Y-%m-%d') if requirement.created_at else None
