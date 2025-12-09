@@ -453,6 +453,32 @@ export async function login(username: string, password: string) {
     return data;
 }
 
+// Verify login OTP function for 2FA
+export async function verifyLoginOTP(username: string, password: string, otp: string) {
+    const domain = getCurrentDomain();
+    console.log('Verifying login OTP for:', { username, domain });
+    
+    const response = await fetch(getApiUrl('/login/verify-otp'), {
+        method: 'POST',
+        headers: {
+            'X-Original-Domain': domain,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password, otp }),
+    });
+
+    console.log('OTP verification response status:', response.status);
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to verify OTP' }));
+        throw new Error(errorData.message || 'Invalid OTP');
+    }
+
+    const data = await response.json();
+    console.log('OTP verification response:', data);
+    return data;
+}
+
 // Recruiter login function that includes domain header
 export async function recruiterLogin(username: string, password: string) {
     const domain = getCurrentDomain();
