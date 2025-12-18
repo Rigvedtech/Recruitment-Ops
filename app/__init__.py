@@ -18,6 +18,7 @@ from app.routes.redis_health_api import redis_health_bp
 from app.routes.costing_api import costing_bp
 from app.routes.job_posting_api import job_posting_bp
 from app.routes.enum_api import enum_bp
+from app.routes.career_portal_api import career_portal_bp
 from app.database import init_db, db
 from app.services.sla_service import SLAService
 from app.middleware.domain_db_resolver import domain_db_resolver
@@ -52,7 +53,9 @@ def create_app(config_name='default'):
              'http://localhost:3000',
              'http://localhost:6969',
              'http://127.0.0.1:3000',
-             'http://127.0.0.1:6969'
+             'http://127.0.0.1:6969',
+             'http://172.16.16.28:3000',
+             'http://172.16.16.28:6969'
          ],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
          allow_headers=['Content-Type', 'Authorization', 'X-Original-Domain', 'X-Domain'],
@@ -121,6 +124,7 @@ def create_app(config_name='default'):
     app.register_blueprint(costing_bp)  # Register costing API routes
     app.register_blueprint(job_posting_bp)  # Register job posting API routes
     app.register_blueprint(enum_bp)  # Register enum API routes
+    app.register_blueprint(career_portal_bp)  # Register career portal API routes (public)
 
     # Configure and start APScheduler
     app.config['SCHEDULER_API_ENABLED'] = False  # Disable built-in API routes to avoid conflicts
@@ -158,11 +162,13 @@ def create_app(config_name='default'):
                 'http://localhost:3000',
                 'http://localhost:6969',
                 'http://127.0.0.1:3000',
-                'http://127.0.0.1:6969'
+                'http://127.0.0.1:6969',
+                'http://172.16.16.28:3000',
+                'http://172.16.16.28:6969'
             ]
             
             # Check if origin is allowed
-            is_allowed = origin in allowed_origins or (origin and ('localhost' in origin or '127.0.0.1' in origin))
+            is_allowed = origin in allowed_origins or (origin and ('localhost' in origin or '127.0.0.1' in origin or '172.16.16.28' in origin))
             
             if is_allowed:
                 response = make_response('', 200)
@@ -243,13 +249,15 @@ def create_app(config_name='default'):
             'http://localhost:3000',
             'http://localhost:6969',
             'http://127.0.0.1:3000',
-            'http://127.0.0.1:6969'
+            'http://127.0.0.1:6969',
+            'http://172.16.16.28:3000',
+            'http://172.16.16.28:6969'
         ]
         
         # Ensure CORS headers are set (Flask-CORS should do this, but ensure it works)
         if origin:
             # Check if origin is allowed (exact match or localhost variant)
-            if origin in allowed_origins or (origin and ('localhost' in origin or '127.0.0.1' in origin)):
+            if origin in allowed_origins or (origin and ('localhost' in origin or '127.0.0.1' in origin or '172.16.16.28' in origin)):
                 # Only set if not already set by Flask-CORS
                 if 'Access-Control-Allow-Origin' not in response.headers:
                     response.headers['Access-Control-Allow-Origin'] = origin
